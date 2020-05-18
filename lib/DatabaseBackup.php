@@ -19,6 +19,8 @@ class DatabaseBackup
     protected $destination_dir;
 
     /**
+     * Archive filename.
+     *
      * @var string
      */
     protected $archive_filename;
