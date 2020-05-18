@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'keep_daily_backups'   => 60, // Days to keep daily backups
+    'keep_daily_backups'   => 30, // Days to keep daily backups
     'keep_monthly_backups' => 12, // Months to keep monthly backups
     'filesystems' => [
         [
