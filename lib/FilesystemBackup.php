@@ -37,6 +37,11 @@ class FilesystemBackup
     protected $destination_dir;
 
     /**
+     * @var string
+     */
+    protected $archive_filename;
+
+    /**
      * FilesystemBackup constructor.
      *
      * @param array $config
@@ -104,10 +109,15 @@ class FilesystemBackup
 
     protected function getArchiveFile(): string
     {
-        return sprintf('%s/%s',
-            $this->destination_dir,
-            Helper::generateFilename($this->getSlug())
-        );
+        if(empty($this->archive_filename)) {
+            $this->archive_filename = sprintf('%s/%s',
+                $this->destination_dir,
+                Helper::generateFilename($this->getSlug())
+            );
+
+        }
+
+        return $this->archive_filename;
     }
 
     protected function getSlug(): string

@@ -19,6 +19,11 @@ class DatabaseBackup
     protected $destination_dir;
 
     /**
+     * @var string
+     */
+    protected $archive_filename;
+
+    /**
      * DatabaseBackup constructor.
      *
      * @param array $config
@@ -123,10 +128,14 @@ class DatabaseBackup
 
     protected function getFile()
     {
-        return sprintf('%s/%s',
-            $this->destination_dir,
-            Helper::generateFilename($this->getSlug(), '.sql')
-        );
+        if(empty($this->archive_filename)) {
+            $this->archive_filename = sprintf('%s/%s',
+                $this->destination_dir,
+                Helper::generateFilename($this->getSlug(), '.sql')
+            );
+        }
+
+        return $this->archive_filename;
     }
 
     protected function generateDumpCommand(): string
