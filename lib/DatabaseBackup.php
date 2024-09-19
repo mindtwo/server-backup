@@ -142,7 +142,7 @@ class DatabaseBackup
 
     protected function generateDumpCommand(): string
     {
-        return sprintf('mysqldump -h %s -u%s -p%s %s > %s',
+        return sprintf('mysqldump --no-tablespaces -h %s -u%s -p%s %s > %s',
             $this->getHost(),
             $this->getUser(),
             $this->getPassword(),
