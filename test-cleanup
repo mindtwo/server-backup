@@ -1,4 +1,37 @@
-#!/usr/bin/php
+#!/bin/bash
+
+# Get the directory of the current script
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Determine PHP command to use
+PHP_COMMAND="php"
+
+# Check if config file exists
+CONFIG_FILE="${DIR}/config.php"
+if [ -f "$CONFIG_FILE" ]; then
+    # Try to extract PHP command from config file
+    CUSTOM_PHP=$(grep -Po "'php_command'\s*=>\s*'\K[^']*" "$CONFIG_FILE" 2>/dev/null)
+    if [ ! -z "$CUSTOM_PHP" ]; then
+        PHP_COMMAND="$CUSTOM_PHP"
+    fi
+fi
+
+# Check if PHP version is specified via command line argument
+for arg in "$@"; do
+    if [[ "$arg" == "--php="* ]]; then
+        PHP_COMMAND="${arg#*=}"
+        # Remove this argument from the arguments list that will be passed to the PHP script
+        set -- "${@/$arg/}"
+    fi
+done
+
+# Path to the actual PHP script
+PHP_SCRIPT="${DIR}/.test-cleanup.php"
+
+# If the PHP script doesn't exist, create it by copying the current file
+if [ ! -f "$PHP_SCRIPT" ]; then
+    # Copy the content of the current script but skip the first line (shebang)
+    cat > "$PHP_SCRIPT" << 'EOF'
 <?php
 declare(strict_types=1);
 
@@ -40,6 +73,7 @@ Options:
   --run-cleanup Run the cleanup process to remove expired backups
   --all         Run both test creation and cleanup (default)
   --help        Display this help message
+  --php=X       Use specific PHP version/command (e.g. --php=php83)
 
 Example:
   ./test-cleanup --all
@@ -49,7 +83,7 @@ EOT;
 }
 
 // Parse command line options
-$options = getopt('', ['run-test', 'run-cleanup', 'all']);
+$options = getopt('', ['run-test', 'run-cleanup', 'all', 'php:']);
 $runTest = isset($options['run-test']) || isset($options['all']) || empty($options);
 $runCleanup = isset($options['run-cleanup']) || isset($options['all']) || empty($options);
 
@@ -115,3 +149,23 @@ try {
     Helper::logDebug("Stack trace: " . $e->getTraceAsString());
     exit(1);
 }
+EOF
+fi
+
+# Check if PHP version is sufficient (need 8.0+ for match expression)
+if [[ "$("$PHP_COMMAND" -r 'echo version_compare(PHP_VERSION, "8.0.0", "<") ? "too_old" : "ok";')" == "too_old" ]]; then
+    echo "Error: Your PHP version is too old. This script requires PHP 8.0 or higher."
+    echo "Current PHP command: $PHP_COMMAND, Version: $("$PHP_COMMAND" -r 'echo PHP_VERSION;')"
+    echo ""
+    echo "Solutions:"
+    echo "1. Use a newer PHP version by adding to config.php:"
+    echo "   'php_command' => 'php83',"
+    echo ""
+    echo "2. Or specify PHP version on command line:"
+    echo "   ./test-cleanup --php=php83 ${@}"
+    echo ""
+    exit 1
+fi
+
+# Execute the PHP script with the provided arguments
+"$PHP_COMMAND" "$PHP_SCRIPT" "$@"

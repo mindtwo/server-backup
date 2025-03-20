@@ -23,7 +23,9 @@ A professional PHP backup system for creating and managing backups of your files
 
 This project has a few system requirements:
 
-- PHP >= 8.0 (optimized for PHP 8.3)
+- **PHP >= 8.0** (optimized for PHP 8.3)
+  - The script uses features like match expressions that require PHP 8.0+
+  - If your server's default PHP is older, you can specify a newer version using the `php_command` setting
 - Linux/Unix operating system
 - MySQL client tools (for database backups)
 - tar utility (for filesystem backups)
@@ -149,6 +151,13 @@ You can configure multiple database backups by adding additional entries to the 
 
 The script uses a minimal console output approach - only critical messages and a summary are shown in the console, while comprehensive details are written to the log file. This keeps the console output clean and readable.
 
+#### PHP Configuration
+
+- `php_command`: Specify which PHP command to use for CLI operations (default: 'php')
+  - This is useful for servers with multiple PHP versions installed
+  - Examples: 'php83', 'php84', '/usr/bin/php83'
+  - This setting is particularly important for shared hosting environments where the default PHP may be older than required
+
 #### Retention Options
 
 - `keep_daily_backups`: Number of days to keep daily backups (default: 30)
@@ -169,7 +178,20 @@ To run backups automatically, add the script to your crontab:
 
 ```
 # Run backups daily at 2:00 AM
-0 2 * * * /path/to/backup.php
+0 2 * * * /path/to/backup
+```
+
+If you need to specify a specific PHP version for your cron job:
+
+```
+# Run backups daily at 2:00 AM with PHP 8.3
+0 2 * * * /path/to/backup --php=php83
+```
+
+Alternatively, configure the PHP command in your config.php file:
+
+```php
+'php_command' => 'php83',
 ```
 
 ## Security Best Practices
@@ -197,9 +219,14 @@ without waiting for real backups to expire.
 
 # Only run cleanup process
 ./test-cleanup --run-cleanup
+
+# Use a specific PHP version
+./test-cleanup --php=php83 --run-test
 ```
 
 When run, it creates test backup files with various timestamps and validates your retention settings
 without waiting for real backups to age.
+
+> **Note**: Both `backup` and `test-cleanup` scripts now support specifying the PHP version to use, either via the `--php=` command line parameter or through the `php_command` setting in your config.php file. This is particularly useful on servers where the default PHP version is too old to support this script (requires PHP 8.0+).
 
 [![Back to the top](https://www.mindtwo.de/downloads/doodles/github/repository-footer.png)](#)

@@ -10,8 +10,45 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Change to the script directory
 cd "$SCRIPT_DIR"
 
+# Determine PHP command to use
+PHP_COMMAND="php"
+
+# Check if config file exists
+CONFIG_FILE="${SCRIPT_DIR}/config.php"
+if [ -f "$CONFIG_FILE" ]; then
+    # Try to extract PHP command from config file
+    CUSTOM_PHP=$(grep -Po "'php_command'\s*=>\s*'\K[^']*" "$CONFIG_FILE" 2>/dev/null)
+    if [ ! -z "$CUSTOM_PHP" ]; then
+        PHP_COMMAND="$CUSTOM_PHP"
+    fi
+fi
+
+# Check if PHP version is specified via command line argument
+for arg in "$@"; do
+    if [[ "$arg" == "--php="* ]]; then
+        PHP_COMMAND="${arg#*=}"
+        # Remove this argument from the arguments list that will be passed to the PHP script
+        set -- "${@/$arg/}"
+    fi
+done
+
+# Check if PHP version is sufficient (need 8.0+ for match expression)
+if [[ "$("$PHP_COMMAND" -r 'echo version_compare(PHP_VERSION, "8.0.0", "<") ? "too_old" : "ok";')" == "too_old" ]]; then
+    echo "Error: Your PHP version is too old. This script requires PHP 8.0 or higher."
+    echo "Current PHP command: $PHP_COMMAND, Version: $("$PHP_COMMAND" -r 'echo PHP_VERSION;')"
+    echo ""
+    echo "Solutions:"
+    echo "1. Use a newer PHP version by adding to config.php:"
+    echo "   'php_command' => 'php83',"
+    echo ""
+    echo "2. Or specify PHP version on command line:"
+    echo "   ./backup --php=php83 ${@}"
+    echo ""
+    exit 1
+fi
+
 # Run the PHP backup script
-php backup.php
+"$PHP_COMMAND" backup.php "$@"
 
 # Exit with the same status code as the PHP script
 exit $?

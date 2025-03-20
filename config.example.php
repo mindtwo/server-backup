@@ -87,6 +87,9 @@ return [
     'log_level' => 1, // 0 = errors only, 1 = info (default), 2 = debug
     'log_max_size' => 5 * 1024 * 1024, // Maximum log file size before rotation (5MB default)
     'log_files_to_keep' => 5, // Number of rotated log files to keep
+    
+    // PHP CLI configuration
+    'php_command' => 'php', // PHP command to use for CLI operations (can be 'php', 'php83', '/usr/bin/php83', etc.)
 
     // Notification settings (uncomment and configure to use)
     // 'notifications' => [
