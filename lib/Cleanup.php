@@ -69,8 +69,14 @@ class Cleanup
         // Add filesystem backup destinations
         if (!empty($this->config['filesystems']) && is_array($this->config['filesystems'])) {
             foreach ($this->config['filesystems'] as $filesystem) {
-                if (!empty($filesystem['destination']) && is_dir($filesystem['destination'])) {
-                    $directories[] = Helper::normalizePath($filesystem['destination']);
+                if (!empty($filesystem['destination'])) {
+                    $destination = Helper::normalizePath($filesystem['destination']);
+                    if (is_dir($destination)) {
+                        $directories[] = $destination;
+                        Helper::logDebug("Added filesystem backup directory for cleanup: {$destination}");
+                    } else {
+                        Helper::logError("Filesystem backup destination directory not found: {$destination}");
+                    }
                 }
             }
         }
@@ -78,13 +84,21 @@ class Cleanup
         // Add database backup destinations
         if (!empty($this->config['databases']) && is_array($this->config['databases'])) {
             foreach ($this->config['databases'] as $database) {
-                if (!empty($database['destination']) && is_dir($database['destination'])) {
-                    $directories[] = Helper::normalizePath($database['destination']);
+                if (!empty($database['destination'])) {
+                    $destination = Helper::normalizePath($database['destination']);
+                    if (is_dir($destination)) {
+                        $directories[] = $destination;
+                        Helper::logDebug("Added database backup directory for cleanup: {$destination}");
+                    } else {
+                        Helper::logError("Database backup destination directory not found: {$destination}");
+                    }
                 }
             }
         }
         
-        return array_unique($directories);
+        $uniqueDirs = array_unique($directories);
+        Helper::logDebug("Total cleanup directories found: " . count($uniqueDirs));
+        return $uniqueDirs;
     }
     
     /**
@@ -262,17 +276,36 @@ class Cleanup
         // Ensure directory has trailing slash
         $directory = rtrim($directory, '/') . '/';
         
+        Helper::logDebug("Scanning directory for backup files: {$directory}");
+        
         $files = scandir($directory);
         if ($files === false) {
+            Helper::logError("Failed to scan directory: {$directory}");
             return [];
         }
         
         // Filter out directories and non-backup files
-        return array_filter($files, function($file) use ($directory) {
-            return !in_array($file, ['.', '..']) && 
-                   is_file($directory . $file) && 
-                   preg_match('/\.(tar|sql)\.gz$/', $file);
+        $backupFiles = array_filter($files, function($file) use ($directory) {
+            // Skip directory entries
+            if (in_array($file, ['.', '..']) || !is_file($directory . $file)) {
+                return false;
+            }
+            
+            // Check if file matches backup pattern
+            $isBackup = preg_match('/\.(tar|sql)\.gz$/', $file);
+            
+            // For debug purposes, log files that might be backups but don't match pattern
+            if (!$isBackup && (strpos($file, '.tar') !== false || strpos($file, '.sql') !== false)) {
+                Helper::logDebug("Found file that might be a backup but doesn't match pattern: {$file}");
+            }
+            
+            return $isBackup;
         });
+        
+        $count = count($backupFiles);
+        Helper::logDebug("Found {$count} backup files in {$directory}");
+        
+        return $backupFiles;
     }
     
     /**
