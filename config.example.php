@@ -68,13 +68,23 @@ return [
         */
     ],
     
-    // Additional options (uncomment to use)
+    // Notification settings (uncomment and configure to use)
     // 'notifications' => [
     //     'email' => [
-    //         'enabled' => false,
-    //         'to'      => 'admin@example.com',
-    //         'from'    => 'backup@example.com',
-    //         'subject' => 'Backup Report',
+    //         'enabled'       => false,           // Set to true to enable email notifications
+    //         'to'            => 'admin@example.com',  // Recipient email address
+    //         'from'          => 'backup@example.com', // Sender email address
+    //         'subject'       => 'Backup Report',      // Email subject prefix
+    //         'always_notify' => false,           // Set to true to send emails even on success
+    //         
+    //         // SMTP configuration (optional, only needed if PHP mail() defaults don't work)
+    //         'smtp' => [
+    //             'host'     => 'smtp.example.com',    // SMTP server address
+    //             'port'     => 587,                   // SMTP port (usually 25, 465, or 587)
+    //             'username' => 'smtp-user',           // SMTP username if authentication is required
+    //             'password' => 'smtp-password',       // SMTP password if authentication is required
+    //             'secure'   => 'tls',                 // Connection security: 'ssl', 'tls', or empty for none
+    //         ],
     //     ],
     // ],
 ];

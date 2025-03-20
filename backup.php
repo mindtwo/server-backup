@@ -18,6 +18,7 @@ require_once __DIR__ . '/lib/FilesystemBackup.php';
 require_once __DIR__ . '/lib/DatabaseBackup.php';
 require_once __DIR__ . '/lib/Cleanup.php';
 require_once __DIR__ . '/lib/BackupManager.php';
+require_once __DIR__ . '/lib/NotificationManager.php';
 
 use ServerBackup\Helper;
 use ServerBackup\BackupManager;

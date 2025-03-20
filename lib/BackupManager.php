@@ -49,6 +49,9 @@ class BackupManager
         // Run cleanup process
         $this->runCleanup();
         
+        // Send notifications if configured
+        $this->sendNotifications($success);
+        
         return $success;
     }
     
@@ -195,5 +198,28 @@ class BackupManager
         }
         
         return implode("\n", $summary);
+    }
+    
+    /**
+     * Send notifications about backup results
+     *
+     * @param bool $success Whether all backups succeeded
+     * @return bool True if notifications were sent successfully
+     */
+    private function sendNotifications(bool $success): bool
+    {
+        if (empty($this->config['notifications'])) {
+            return true; // No notifications configured
+        }
+        
+        try {
+            require_once __DIR__ . '/NotificationManager.php';
+            $notificationManager = new NotificationManager($this->config);
+            $summary = $this->generateSummary();
+            return $notificationManager->sendNotifications($this->results, $summary, $success);
+        } catch (\Throwable $e) {
+            Helper::log("Notification error: " . $e->getMessage());
+            return false;
+        }
     }
 }
