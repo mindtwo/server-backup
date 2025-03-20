@@ -49,7 +49,7 @@ return [
     // Filesystem backups
     'filesystems' => [
         [
-            'slug'        => 'website',
+            'slug'        => 'production',
             'source'      => '/var/www/mysite',
             'destination' => 'storage/website',
             'exclude'     => [
@@ -64,7 +64,7 @@ return [
     // Database backups
     'databases' => [
         [
-            'slug'        => 'mydb',
+            'slug'        => 'production',
             'destination' => 'storage/databases',
             'db_host'     => 'localhost',
             'db_user'     => 'dbuser',
