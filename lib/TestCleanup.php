@@ -155,8 +155,8 @@ class TestCleanup
                 $date->modify('-1 day');
             }
             
-            $this->createTestFile($directory, $date, 'daily-old', 'tar');
-            $this->createTestFile($directory, $date, 'daily-old', 'sql');
+            $this->createTestFile($directory, $date, 'daily-to-delete', 'tar');
+            $this->createTestFile($directory, $date, 'daily-to-delete', 'sql');
         }
     }
     
@@ -195,8 +195,8 @@ class TestCleanup
             $date->modify("-{$monthsAgo} months");
             $date->setDate((int)$date->format('Y'), (int)$date->format('m'), 1); // First day of month
             
-            $this->createTestFile($directory, $date, 'monthly-old', 'tar');
-            $this->createTestFile($directory, $date, 'monthly-old', 'sql');
+            $this->createTestFile($directory, $date, 'monthly-to-delete', 'tar');
+            $this->createTestFile($directory, $date, 'monthly-to-delete', 'sql');
         }
     }
     

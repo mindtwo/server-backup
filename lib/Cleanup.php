@@ -104,23 +104,108 @@ class Cleanup
         
         $files = $this->scanBackupFiles($directory);
         
+        // Group files by month to ensure we keep at least one backup per month
+        $monthlyGroups = [];
+        $dailyFiles = [];
+        
         foreach ($files as $file) {
             $fullPath = $directory . $file;
             
-            // Check if this is a first-of-month backup (keep longer)
+            // Extract timestamp from file modification time
+            $timestamp = filemtime($fullPath);
+            if ($timestamp === false) {
+                continue;
+            }
+            
+            $month = date('Y-m', $timestamp);
+            
+            // For monthly backups, add to monthly group
             if ($this->isMonthlyBackup($file)) {
-                if ($this->isMonthlyBackupExpired($fullPath)) {
-                    Helper::log("Removing expired monthly backup: {$file}");
-                    if (unlink($fullPath)) {
-                        $deletedFiles[] = $fullPath;
+                if (!isset($monthlyGroups[$month])) {
+                    $monthlyGroups[$month] = [];
+                }
+                $monthlyGroups[$month][] = [
+                    'file' => $file,
+                    'path' => $fullPath,
+                    'timestamp' => $timestamp
+                ];
+            } else {
+                // For regular daily backups
+                $dailyFiles[] = [
+                    'file' => $file,
+                    'path' => $fullPath,
+                    'timestamp' => $timestamp,
+                    'month' => $month
+                ];
+            }
+        }
+        
+        // Process monthly backups first
+        // For each month, keep the newest backup if within retention period
+        $keptMonths = [];
+        $keptFiles = [];
+        
+        // Get the oldest month we want to keep
+        $monthlyRetentionTime = time() - ($this->keepMonthlyBackups * 31 * 24 * 60 * 60);
+        
+        foreach ($monthlyGroups as $month => $monthFiles) {
+            // Sort files by timestamp (newest first)
+            usort($monthFiles, function($a, $b) {
+                return $b['timestamp'] - $a['timestamp'];
+            });
+            
+            // Only keep the newest file for each month that's within retention period
+            if (!empty($monthFiles) && $monthFiles[0]['timestamp'] >= $monthlyRetentionTime) {
+                $keptMonths[] = $month;
+                $keptFiles[] = $monthFiles[0]['path'];
+                
+                // Remove the first/newest file that we're keeping
+                array_shift($monthFiles);
+                
+                // Delete the rest
+                foreach ($monthFiles as $file) {
+                    Helper::log("Removing extra monthly backup: {$file['file']}");
+                    if (unlink($file['path'])) {
+                        $deletedFiles[] = $file['path'];
                     }
                 }
-            } 
-            // Not a monthly backup, treat as daily
-            else if ($this->isDailyBackupExpired($fullPath)) {
-                Helper::log("Removing expired daily backup: {$file}");
-                if (unlink($fullPath)) {
-                    $deletedFiles[] = $fullPath;
+            } else {
+                // All files in this month are outside retention period
+                foreach ($monthFiles as $file) {
+                    Helper::log("Removing expired monthly backup: {$file['file']}");
+                    if (unlink($file['path'])) {
+                        $deletedFiles[] = $file['path'];
+                    }
+                }
+            }
+        }
+        
+        // Now process daily backups
+        // Keep all files within daily retention period
+        $dailyRetentionTime = time() - ($this->keepDailyBackups * 24 * 60 * 60);
+        
+        foreach ($dailyFiles as $file) {
+            // Keep if within daily retention period
+            if ($file['timestamp'] >= $dailyRetentionTime) {
+                $keptFiles[] = $file['path'];
+            }
+            // Keep if it's the newest backup for a month in the monthly retention period
+            // but only if we don't already have a monthly backup for that month
+            else if (!in_array($file['month'], $keptMonths)) {
+                $monthTimestamp = strtotime($file['month'] . '-01');
+                if ($monthTimestamp !== false && $monthTimestamp >= $monthlyRetentionTime) {
+                    $keptFiles[] = $file['path'];
+                    $keptMonths[] = $file['month'];
+                } else {
+                    Helper::log("Removing expired daily backup: {$file['file']}");
+                    if (unlink($file['path'])) {
+                        $deletedFiles[] = $file['path'];
+                    }
+                }
+            } else {
+                Helper::log("Removing expired daily backup: {$file['file']}");
+                if (unlink($file['path'])) {
+                    $deletedFiles[] = $file['path'];
                 }
             }
         }
@@ -161,7 +246,7 @@ class Cleanup
     private function isMonthlyBackup(string $filename): bool
     {
         // Check if filename contains a date pattern with day 01
-        return (bool)preg_match('/\d{6}01-\d{6}/', $filename);
+        return (bool)preg_match('/\d{4}\d{2}01-\d{6}/', $filename);
     }
     
     /**

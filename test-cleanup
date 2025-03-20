@@ -9,8 +9,15 @@ PHP_COMMAND="php"
 # Check if config file exists
 CONFIG_FILE="${DIR}/config.php"
 if [ -f "$CONFIG_FILE" ]; then
-    # Try to extract PHP command from config file
-    CUSTOM_PHP=$(grep -Po "'php_command'\s*=>\s*'\K[^']*" "$CONFIG_FILE" 2>/dev/null)
+    # Create a simple PHP script to extract the php_command setting
+    PHP_EXTRACT=$(cat <<'EOPHP'
+<?php
+$config = include(__DIR__ . '/config.php');
+echo isset($config['php_command']) ? $config['php_command'] : '';
+EOPHP
+)
+    # Execute the inline PHP code to extract the PHP command
+    CUSTOM_PHP=$(php -r "$PHP_EXTRACT" 2>/dev/null)
     if [ ! -z "$CUSTOM_PHP" ]; then
         PHP_COMMAND="$CUSTOM_PHP"
     fi
@@ -119,9 +126,12 @@ try {
         echo "\nRetention Policies:\n";
         echo "  - Keep daily backups: {$results['retention_policies']['keep_daily_backups']} days\n";
         echo "  - Keep monthly backups: {$results['retention_policies']['keep_monthly_backups']} months\n";
-        echo "\nTest files have been created with a mix of dates to test cleanup functionality.\n";
-        echo "Some files are within the retention period and should be kept, while others\n";
-        echo "are older and should be removed by the cleanup process.\n";
+        echo "\nTest files have been created with a mix of dates to test cleanup functionality:\n";
+        echo "  - Files with 'daily' in name: Recent daily backups (within {$results['retention_policies']['keep_daily_backups']} days) - SHOULD BE KEPT\n";
+        echo "  - Files with 'daily-to-delete' in name: Old daily backups - SHOULD BE DELETED\n";
+        echo "  - Files with 'monthly' in name: Recent monthly backups (within {$results['retention_policies']['keep_monthly_backups']} months) - SHOULD BE KEPT\n";
+        echo "  - Files with 'monthly-to-delete' in name: Old monthly backups - SHOULD BE DELETED\n";
+        echo "\nPlease now run with --run-cleanup to test the cleanup process.\n";
     }
     
     // Run cleanup if requested
