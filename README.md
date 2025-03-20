@@ -8,11 +8,14 @@ A professional PHP backup system for creating and managing backups of your files
 
 - Filesystem backups with tar and gzip compression
 - MySQL database backups with customizable options
+- Support for database-only or filesystem-only backups
+- Multiple backup configurations for different sources
 - Flexible backup rotation policy (daily and monthly backups)
 - Automated cleanup of old backups
 - Email notifications for backup status
 - Configurable file exclusions
-- Detailed error reporting
+- Detailed logging with rotation
+- Minimal console output with comprehensive log files
 - Secure command execution
 - PHP 8.3 compatible
 
@@ -41,10 +44,6 @@ The `config.php` file contains all settings for your backups. Here's an example:
 
 ```php
 return [
-    // Retention policies
-    'keep_daily_backups'   => 30,  // Days to keep daily backups
-    'keep_monthly_backups' => 12,  // Months to keep monthly backups
-    
     // Filesystem backups
     'filesystems' => [
         [
@@ -72,6 +71,16 @@ return [
         ],
     ],
     
+    // Retention policies
+    'keep_daily_backups'   => 30,  // Days to keep daily backups
+    'keep_monthly_backups' => 12,  // Months to keep monthly backups
+    
+    // Logging configuration
+    'log_file' => 'logs/server-backup.log', // Path to log file
+    'log_level' => 1, // 0 = errors only, 1 = info (default), 2 = debug
+    'log_max_size' => 5 * 1024 * 1024, // Maximum log file size (5MB)
+    'log_files_to_keep' => 5, // Number of rotated log files to keep
+    
     // Notification settings
     'notifications' => [
         'email' => [
@@ -81,13 +90,13 @@ return [
             'subject'       => 'Backup Report',      // Email subject prefix
             'always_notify' => false,           // Set to true to send emails even on success
             
-            // SMTP configuration (optional, only needed if PHP mail() defaults don't work)
+            // SMTP configuration (optional)
             'smtp' => [
                 'host'     => 'smtp.example.com',    // SMTP server address
-                'port'     => 587,                   // SMTP port (usually 25, 465, or 587)
-                'username' => 'smtp-user',           // SMTP username if authentication is required
-                'password' => 'smtp-password',       // SMTP password if authentication is required
-                'secure'   => 'tls',                 // Connection security: 'ssl', 'tls', or empty for none
+                'port'     => 587,                   // SMTP port
+                'username' => 'smtp-user',           // SMTP username
+                'password' => 'smtp-password',       // SMTP password
+                'secure'   => 'tls',                 // 'ssl', 'tls', or empty
             ],
         ],
     ],
@@ -96,10 +105,13 @@ return [
 
 ### Configuration Options
 
-#### Global Options
+#### Backup Types
 
-- `keep_daily_backups`: Number of days to keep daily backups (default: 30)
-- `keep_monthly_backups`: Number of months to keep monthly backups (default: 12)
+The script supports three different backup configurations:
+
+1. **Both filesystem and database backups** - Configure both the `filesystems` and `databases` arrays
+2. **Database-only backups** - Leave the `filesystems` array empty or remove it completely
+3. **Filesystem-only backups** - Leave the `databases` array empty or remove it completely
 
 #### Filesystem Backup Options
 
@@ -109,6 +121,8 @@ return [
 - `exclude`: Array of patterns to exclude (using tar pattern format)
 - `verbose`: Whether to show detailed output (default: false)
 
+You can configure multiple filesystem backups by adding additional entries to the `filesystems` array.
+
 #### Database Backup Options
 
 - `slug`: Identifier for the backup (used in filenames)
@@ -117,7 +131,28 @@ return [
 - `db_user`: Database username
 - `db_password`: Database password
 - `db_name`: Database name
-- `tables`: Optional list of specific tables to back up
+- `tables`: Optional list of specific tables to back up (empty array = all tables)
+- `db_socket`: Optional MySQL socket path
+- `db_port`: Optional MySQL port
+- `mysqldump_command`: Optional custom path to mysqldump
+- `command_timeout`: Optional timeout in seconds for database backups
+- `mysqldump_options`: Optional array of additional mysqldump options
+
+You can configure multiple database backups by adding additional entries to the `databases` array.
+
+#### Logging Options
+
+- `log_file`: Path to log file (relative to the script directory or absolute)
+- `log_level`: Logging detail level (0 = errors only, 1 = info, 2 = debug)
+- `log_max_size`: Maximum size of log file before rotation in bytes (default: 5MB)
+- `log_files_to_keep`: Number of rotated log files to keep (default: 5)
+
+The script uses a minimal console output approach - only critical messages and a summary are shown in the console, while comprehensive details are written to the log file. This keeps the console output clean and readable.
+
+#### Retention Options
+
+- `keep_daily_backups`: Number of days to keep daily backups (default: 30)
+- `keep_monthly_backups`: Number of months to keep monthly backups (default: 12)
 
 #### Notification Options
 
@@ -142,6 +177,7 @@ To run backups automatically, add the script to your crontab:
 - Run the backup script as a user with appropriate filesystem permissions
 - Store backups in a location not accessible via the web server
 - For secure offsite backups, consider setting up automated transfers to a remote server
+- Set restrictive permissions on config.php (600) to protect database credentials
 
 
 ## Testing Cleanup Functionality

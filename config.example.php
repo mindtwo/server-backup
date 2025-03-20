@@ -7,16 +7,8 @@ declare(strict_types=1);
  * Copy this file to config.php and customize the settings for your environment.
  */
 return [
-    // Logging configuration
-    'log_file' => 'logs/server-backup.log', // Path to log file (relative to BASE_PATH or absolute)
-    'log_level' => 1, // 0 = errors only, 1 = info (default), 2 = debug
-    'log_max_size' => 5 * 1024 * 1024, // Maximum log file size before rotation (5MB default)
-    'log_files_to_keep' => 5, // Number of rotated log files to keep
-    // Retention policies
-    'keep_daily_backups' => 30, // Days to keep daily backups
-    'keep_monthly_backups' => 12, // Months to keep monthly backups
-
     // Filesystem backups configuration
+    // You can remove or leave empty for database-only backups
     'filesystems' => [
         [
             'slug' => 'production', // Identifier used in filenames and logs
@@ -49,6 +41,7 @@ return [
     ],
 
     // Database backups configuration
+    // You can remove or leave empty for filesystem-only backups
     'databases' => [
         [
             'slug' => 'production', // Identifier used in filenames and logs
@@ -59,7 +52,7 @@ return [
             'db_name' => '', // Database name
             'tables' => [], // Optional: specific tables to backup (empty = all tables)
             
-            // Domain Factory specific settings (if needed)
+            // Advanced database settings (if needed)
             // 'db_socket' => '/path/to/mysql.sock', // MySQL socket path
             // 'db_port' => 3306, // MySQL port if not default
             // 'mysqldump_command' => '/usr/local/bin/mysqldump', // Full path to mysqldump if needed
@@ -84,6 +77,16 @@ return [
         ],
         */
     ],
+
+    // Retention policies
+    'keep_daily_backups' => 30, // Days to keep daily backups
+    'keep_monthly_backups' => 12, // Months to keep monthly backups
+
+    // Logging configuration
+    'log_file' => 'logs/server-backup.log', // Path to log file (relative to BASE_PATH or absolute)
+    'log_level' => 1, // 0 = errors only, 1 = info (default), 2 = debug
+    'log_max_size' => 5 * 1024 * 1024, // Maximum log file size before rotation (5MB default)
+    'log_files_to_keep' => 5, // Number of rotated log files to keep
 
     // Notification settings (uncomment and configure to use)
     // 'notifications' => [

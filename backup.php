@@ -68,8 +68,30 @@ try {
     Helper::log("Starting backup process");
     $success = $backupManager->run();
     
-    // Output summary
-    echo "\n" . $backupManager->generateSummary() . "\n";
+    // Output clean summary to console
+    $summary = $backupManager->generateSummary();
+    
+    // Clean up the summary for console display - only show essential information
+    $summaryLines = explode("\n", $summary);
+    $cleanSummary = [];
+    
+    // Keep the header section and totals
+    for ($i = 0; $i < 5 && $i < count($summaryLines); $i++) {
+        $cleanSummary[] = $summaryLines[$i];
+    }
+    
+    // For failed backups, only show the failure reasons without the details
+    if (!$success) {
+        $cleanSummary[] = "";
+        $cleanSummary[] = "Failed Backups:";
+        foreach ($summaryLines as $line) {
+            if (strpos($line, "- ") === 0) {
+                $cleanSummary[] = $line;
+            }
+        }
+    }
+    
+    echo "\n" . implode("\n", $cleanSummary) . "\n";
     
     // Set exit code based on success
     exit($success ? 0 : 1);

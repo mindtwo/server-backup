@@ -38,7 +38,7 @@ class DatabaseBackup extends AbstractBackup
     public function run(): BackupResult
     {
         try {
-            Helper::logInfo("Starting database backup for {$this->getIdentifier()}", true);
+            Helper::logInfo("Starting database backup for {$this->getIdentifier()}", false);
             
             $this->cleanExistingBackups();
             
@@ -53,7 +53,7 @@ class DatabaseBackup extends AbstractBackup
                 ];
                 
                 // Log detailed error information
-                Helper::logError("Database backup failed for {$this->getIdentifier()}: " . json_encode($errorDetails, JSON_PRETTY_PRINT));
+                Helper::logError("Database backup failed for {$this->getIdentifier()}: " . json_encode($errorDetails, JSON_PRETTY_PRINT), false);
                 
                 return BackupResult::failure(
                     "Database backup failed for {$this->getIdentifier()}",
@@ -69,7 +69,7 @@ class DatabaseBackup extends AbstractBackup
             }
             
             $compressedFile = $this->getBackupFilePath() . '.gz';
-            Helper::logInfo("Database backup completed for {$this->getIdentifier()}", true);
+            Helper::logInfo("Database backup completed for {$this->getIdentifier()}", false);
             
             return BackupResult::success(
                 "Database backup successful for {$this->getIdentifier()}",
@@ -172,13 +172,8 @@ class DatabaseBackup extends AbstractBackup
     {
         [$command, $args] = $commandData;
         
-        // Redirect output to the backup file
-        $tmpArgs = $args;
-        $tmpArgs[] = '>';
-        $tmpArgs[] = $this->getBackupFilePath();
-        
         // Debug log the command being executed
-        Helper::logDebug("Executing command: {$command} " . implode(' ', $tmpArgs));
+        Helper::logDebug("Executing command: {$command} " . implode(' ', $args));
         
         // Get password for environment variable
         $password = $this->getDatabasePassword();
@@ -190,17 +185,52 @@ class DatabaseBackup extends AbstractBackup
         // Add a timeout to prevent hanging processes
         $timeout = $this->config['command_timeout'] ?? 3600; // Default: 1 hour
         
-        // Execute command with environment variables and timeout
-        $result = Helper::safeExecWithEnv($command, $tmpArgs, $env, $timeout);
+        // Create output file directory if it doesn't exist
+        $outputPath = $this->getBackupFilePath();
+        $outputDir = dirname($outputPath);
+        Helper::ensureDirectoryExists($outputDir);
+        
+        // Execute command with environment variables and timeout, redirecting output to file
+        $fullCommand = $command . ' ' . implode(' ', array_map('escapeshellarg', $args)) . ' > ' . escapeshellarg($outputPath);
+        
+        // Execute with environment variables
+        $output = [];
+        $returnCode = 0;
+        
+        if (!empty($env)) {
+            $envPart = '';
+            foreach ($env as $key => $value) {
+                $envPart .= 'export ' . escapeshellarg($key) . '=' . escapeshellarg($value) . '; ';
+            }
+            
+            if ($timeout !== null && $timeout > 0) {
+                $fullCommand = "timeout {$timeout}s " . $fullCommand;
+            }
+            
+            exec($envPart . $fullCommand . ' 2>&1', $output, $returnCode);
+        } else {
+            if ($timeout !== null && $timeout > 0) {
+                $fullCommand = "timeout {$timeout}s " . $fullCommand;
+            }
+            
+            exec($fullCommand . ' 2>&1', $output, $returnCode);
+        }
+        
+        $result = [
+            'output' => implode("\n", $output),
+            'success' => $returnCode === 0,
+            'returnCode' => $returnCode,
+            'command' => $fullCommand
+        ];
         
         // Log error output if the command failed
         if (!$result['success']) {
-            Helper::logError("MySQL dump command failed with output: " . $result['output']);
-            Helper::logError("Return code: " . ($result['returnCode'] ?? 'unknown'));
+            Helper::logError("MySQL dump command failed with output: " . $result['output'], false);
+            Helper::logError("Return code: " . ($result['returnCode'] ?? 'unknown'), false);
             
             // Check if mysqldump exists
             $whichResult = Helper::safeExec('which', [$command]);
-            Helper::logError("MySQL dump location: " . ($whichResult['success'] ? $whichResult['output'] : 'Command not found'));
+            Helper::logError("MySQL dump location: " . ($whichResult['success'] ? $whichResult['output'] : 'Command not found'), false);
         }
         
         return $result;

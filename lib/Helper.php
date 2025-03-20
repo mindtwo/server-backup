@@ -101,7 +101,7 @@ final class Helper
      * @param bool $console Whether to also output to console
      * @return void
      */
-    public static function logError(mixed $message, bool $console = true): void
+    public static function logError(mixed $message, bool $console = false): void
     {
         self::log($message, self::LOG_LEVEL_ERROR, $console);
     }

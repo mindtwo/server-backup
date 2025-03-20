@@ -41,19 +41,19 @@ class BackupManager
         // Run all filesystem backups
         if (!$this->runFilesystemBackups()) {
             $success = false;
-            Helper::logError("One or more filesystem backups failed");
+            Helper::logError("One or more filesystem backups failed", true);
         }
         
         // Run all database backups
         if (!$this->runDatabaseBackups()) {
             $success = false;
-            Helper::logError("One or more database backups failed");
+            Helper::logError("One or more database backups failed", true);
         }
         
         // Run cleanup process
-        Helper::logInfo("Starting cleanup process", true);
+        Helper::logInfo("Starting cleanup process", false);
         $deletedFiles = $this->runCleanup();
-        Helper::logInfo("Cleanup process completed. Deleted files: " . count($deletedFiles), true);
+        Helper::logInfo("Cleanup process completed. Deleted files: " . count($deletedFiles), false);
         
         // Send notifications if configured
         if ($this->sendNotifications($success)) {

@@ -49,7 +49,7 @@ class FilesystemBackup extends AbstractBackup
     public function run(): BackupResult
     {
         try {
-            Helper::logInfo("Starting filesystem backup for {$this->getIdentifier()}", true);
+            Helper::logInfo("Starting filesystem backup for {$this->getIdentifier()}", false);
             
             $this->prepareSourcePaths();
             $this->cleanExistingBackups();
@@ -64,7 +64,7 @@ class FilesystemBackup extends AbstractBackup
                     'return_code' => $result['returnCode'] ?? 'unknown'
                 ];
                 
-                Helper::logError("Filesystem backup failed for {$this->getIdentifier()}: " . json_encode($errorDetails, JSON_PRETTY_PRINT));
+                Helper::logError("Filesystem backup failed for {$this->getIdentifier()}: " . json_encode($errorDetails, JSON_PRETTY_PRINT), false);
                 
                 return BackupResult::failure(
                     "Filesystem backup failed for {$this->getIdentifier()}",
@@ -80,7 +80,7 @@ class FilesystemBackup extends AbstractBackup
             }
             
             $compressedFile = $this->getBackupFilePath() . '.gz';
-            Helper::logInfo("Filesystem backup completed for {$this->getIdentifier()}", true);
+            Helper::logInfo("Filesystem backup completed for {$this->getIdentifier()}", false);
             
             return BackupResult::success(
                 "Filesystem backup successful for {$this->getIdentifier()}",
