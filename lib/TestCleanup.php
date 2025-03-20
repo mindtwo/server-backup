@@ -121,14 +121,14 @@ class TestCleanup
     {
         $keepDays = $this->config['keep_daily_backups'] ?? 30;
         
-        // Create a few backups in the retention period (to be kept)
-        for ($daysAgo = 1; $daysAgo < $keepDays; $daysAgo += 5) {
+        // Create one backup for each day within the retention period
+        for ($daysAgo = 1; $daysAgo <= $keepDays; $daysAgo++) {
             $date = new \DateTime();
             $date->modify("-{$daysAgo} days");
             
             // Skip first day of month (would be a monthly backup)
             if ($date->format('d') === '01') {
-                $date->modify('-1 day');
+                continue;
             }
             
             $this->createTestFile($directory, $date, 'daily', 'tar');
@@ -145,14 +145,14 @@ class TestCleanup
     {
         $keepDays = $this->config['keep_daily_backups'] ?? 30;
         
-        // Create a few backups outside the retention period (to be deleted)
-        for ($daysAgo = $keepDays + 1; $daysAgo < $keepDays * 2; $daysAgo += 15) {
+        // Create 5 additional backups outside the retention period (to be deleted)
+        for ($daysAgo = $keepDays + 1; $daysAgo <= $keepDays + 5; $daysAgo++) {
             $date = new \DateTime();
             $date->modify("-{$daysAgo} days");
             
             // Skip first day of month (would be a monthly backup)
             if ($date->format('d') === '01') {
-                $date->modify('-1 day');
+                continue;
             }
             
             $this->createTestFile($directory, $date, 'daily-to-delete', 'tar');
@@ -169,8 +169,8 @@ class TestCleanup
     {
         $keepMonths = $this->config['keep_monthly_backups'] ?? 12;
         
-        // Create a few monthly backups in the retention period (to be kept)
-        for ($monthsAgo = 1; $monthsAgo < $keepMonths; $monthsAgo += 2) {
+        // Create one backup for each month within the retention period
+        for ($monthsAgo = 1; $monthsAgo <= $keepMonths; $monthsAgo++) {
             $date = new \DateTime();
             $date->modify("-{$monthsAgo} months");
             $date->setDate((int)$date->format('Y'), (int)$date->format('m'), 1); // First day of month
@@ -189,8 +189,8 @@ class TestCleanup
     {
         $keepMonths = $this->config['keep_monthly_backups'] ?? 12;
         
-        // Create a few monthly backups outside the retention period (to be deleted)
-        for ($monthsAgo = $keepMonths + 1; $monthsAgo < $keepMonths * 1.5; $monthsAgo += 2) {
+        // Create 3 additional monthly backups outside the retention period (to be deleted)
+        for ($monthsAgo = $keepMonths + 1; $monthsAgo <= $keepMonths + 3; $monthsAgo++) {
             $date = new \DateTime();
             $date->modify("-{$monthsAgo} months");
             $date->setDate((int)$date->format('Y'), (int)$date->format('m'), 1); // First day of month
