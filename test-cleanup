@@ -24,11 +24,14 @@ EOPHP
 fi
 
 # Check if PHP version is specified via command line argument
+PHP_ARGS=()
 for arg in "$@"; do
     if [[ "$arg" == "--php="* ]]; then
         PHP_COMMAND="${arg#*=}"
-        # Remove this argument from the arguments list that will be passed to the PHP script
-        set -- "${@/$arg/}"
+        # Skip this argument (don't add to PHP_ARGS)
+    else
+        # Add other arguments to the array
+        PHP_ARGS+=("$arg")
     fi
 done
 
@@ -91,8 +94,16 @@ EOT;
 
 // Parse command line options
 $options = getopt('', ['run-test', 'run-cleanup', 'all', 'php:']);
-$runTest = isset($options['run-test']) || isset($options['all']) || empty($options);
-$runCleanup = isset($options['run-cleanup']) || isset($options['all']) || empty($options);
+
+// If no specific option is provided or --all is specified, run both
+if (empty($options) || isset($options['all'])) {
+    $runTest = true;
+    $runCleanup = true;
+} else {
+    // Otherwise, only run what was explicitly requested
+    $runTest = isset($options['run-test']);
+    $runCleanup = isset($options['run-cleanup']);
+}
 
 // Load configuration
 $configFile = __DIR__ . '/config.php';
@@ -177,5 +188,5 @@ if [[ "$("$PHP_COMMAND" -r 'echo version_compare(PHP_VERSION, "8.0.0", "<") ? "t
     exit 1
 fi
 
-# Execute the PHP script with the provided arguments
-"$PHP_COMMAND" "$PHP_SCRIPT" "$@"
+# Execute the PHP script with the filtered arguments
+"$PHP_COMMAND" "$PHP_SCRIPT" "${PHP_ARGS[@]}"
