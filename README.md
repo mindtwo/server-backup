@@ -10,6 +10,7 @@ A professional PHP backup system for creating and managing backups of your files
 - MySQL database backups with customizable options
 - Flexible backup rotation policy (daily and monthly backups)
 - Automated cleanup of old backups
+- Email notifications for backup status
 - Configurable file exclusions
 - Detailed error reporting
 - Secure command execution
@@ -29,12 +30,10 @@ This project has a few system requirements:
 
 1. Clone this repository to a private folder on your server
 2. Make scripts executable: `chmod +x backup.php backup test-cleanup`
-3. Copy `config.example.php` to `config.php`
-4. Edit `config.php` with your backup settings
-5. Create a storage directory: `mkdir -p storage`
-6. Test the cleanup functionality (optional): `./test-cleanup`
-7. Add a cronjob for automatic backups
-8. Run the backup script: `./backup.php`
+3. Copy `config.example.php` to `config.php` and set secure permissions: `chmod 600 config.php`
+4. Edit `config.php` with your backup settings (see Configuration section below)
+5. Run the backup script: `./backup.php`
+6. Set up a cronjob for automatic backups (see Automation section)
 
 ## Configuration
 
@@ -72,6 +71,26 @@ return [
             'db_name'     => 'mydatabase',
         ],
     ],
+    
+    // Notification settings
+    'notifications' => [
+        'email' => [
+            'enabled'       => false,           // Set to true to enable email notifications
+            'to'            => 'admin@example.com',  // Recipient email address
+            'from'          => 'backup@example.com', // Sender email address
+            'subject'       => 'Backup Report',      // Email subject prefix
+            'always_notify' => false,           // Set to true to send emails even on success
+            
+            // SMTP configuration (optional, only needed if PHP mail() defaults don't work)
+            'smtp' => [
+                'host'     => 'smtp.example.com',    // SMTP server address
+                'port'     => 587,                   // SMTP port (usually 25, 465, or 587)
+                'username' => 'smtp-user',           // SMTP username if authentication is required
+                'password' => 'smtp-password',       // SMTP password if authentication is required
+                'secure'   => 'tls',                 // Connection security: 'ssl', 'tls', or empty for none
+            ],
+        ],
+    ],
 ];
 ```
 
@@ -100,6 +119,15 @@ return [
 - `db_name`: Database name
 - `tables`: Optional list of specific tables to back up
 
+#### Notification Options
+
+- `enabled`: Set to true to enable email notifications
+- `to`: Recipient email address
+- `from`: Sender email address
+- `subject`: Email subject prefix
+- `always_notify`: Set to true to send emails even on successful backups (default: only sends on failures)
+- `smtp`: SMTP configuration (optional, only needed if PHP mail() defaults don't work)
+
 ## Automation
 
 To run backups automatically, add the script to your crontab:
@@ -109,16 +137,17 @@ To run backups automatically, add the script to your crontab:
 0 2 * * * /path/to/backup.php
 ```
 
+## Security Best Practices
+
+- Run the backup script as a user with appropriate filesystem permissions
+- Store backups in a location not accessible via the web server
+- For secure offsite backups, consider setting up automated transfers to a remote server
+
+
 ## Testing Cleanup Functionality
 
 The `test-cleanup` command allows you to verify that the backup cleanup system works correctly
-without waiting for real backups to expire. This is especially useful when first setting up the backup system.
-
-When run, it creates test backup files with various timestamps:
-- Some within the retention period (should be kept)
-- Some outside the retention period (should be deleted)
-
-### Usage
+without waiting for real backups to expire.
 
 ```bash
 # Display help information
@@ -134,21 +163,7 @@ When run, it creates test backup files with various timestamps:
 ./test-cleanup --run-cleanup
 ```
 
-### Test Process
-
-1. The test creates fake backup files in all configured backup directories
-2. Files are created with timestamps ranging from recent to old
-3. Both daily backups and monthly backups (first day of month) are created
-4. Running cleanup will delete only the files outside your retention policy
-5. You can verify that recent backups are kept while old ones are deleted
-
-This allows you to validate your retention settings without waiting for real backups to age.
-
-## Security Considerations
-
-- The backup script should be run as a user with appropriate filesystem permissions
-- Database credentials are stored in the config file, so ensure it has restricted permissions: `chmod 600 config.php`
-- Consider storing backups in a location not accessible via the web server
-- For secure offsite backups, consider setting up automated transfers to a remote server
+When run, it creates test backup files with various timestamps and validates your retention settings
+without waiting for real backups to age.
 
 [![Back to the top](https://www.mindtwo.de/downloads/doodles/github/repository-footer.png)](#)
