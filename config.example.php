@@ -24,6 +24,7 @@ return [
                 'var/log/*',
                 '.git',
                 'node_modules',
+                'vendor',
             ],
             'verbose' => false, // Optional: show verbose output
         ],
