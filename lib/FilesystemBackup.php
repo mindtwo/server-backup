@@ -135,11 +135,6 @@ class FilesystemBackup extends AbstractBackup
         // Command arguments
         $args = ['-c'];
         
-        // Add verbose option if needed
-        if (($this->config['verbose'] ?? false) === true) {
-            $args[] = '-v';
-        }
-        
         // Add exclude patterns
         foreach ($excludeParams as $excludePattern) {
             $args[] = '--exclude=' . $excludePattern;

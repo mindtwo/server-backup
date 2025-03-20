@@ -22,8 +22,7 @@ return [
                 '.git',
                 'node_modules',
                 'vendor',
-            ],
-            'verbose' => false, // Optional: show verbose output
+            ]
         ],
 
         // You can add more filesystem backup configurations here
