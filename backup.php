@@ -23,19 +23,41 @@ require_once __DIR__ . '/lib/NotificationManager.php';
 use ServerBackup\Helper;
 use ServerBackup\BackupManager;
 
+// Define base path constant for consistent file paths
+define('BASE_PATH', __DIR__);
+
 // Load configuration
-$configFile = __DIR__ . '/config.php';
+$configFile = BASE_PATH . '/config.php';
 
 if (!file_exists($configFile)) {
-    Helper::log("Configuration file '{$configFile}' does not exist. Please copy config.example.php to config.php and configure it.");
+    Helper::logError("Configuration file '{$configFile}' does not exist. Please copy config.example.php to config.php and configure it.");
     exit(1);
 }
 
 $config = include $configFile;
 
 if (empty($config) || !is_array($config)) {
-    Helper::log("Invalid configuration format. Please check your config.php file.");
+    Helper::logError("Invalid configuration format. Please check your config.php file.");
     exit(1);
+}
+
+// Configure logging
+$logLevel = $config['log_level'] ?? Helper::LOG_LEVEL_INFO;
+Helper::setLogLevel($logLevel);
+
+// Configure log rotation
+if (isset($config['log_max_size'])) {
+    Helper::setMaxLogSize($config['log_max_size']);
+}
+
+if (isset($config['log_files_to_keep'])) {
+    Helper::setLogFilesToKeep($config['log_files_to_keep']);
+}
+
+// Create logs directory if it doesn't exist
+$logsDir = BASE_PATH . '/logs';
+if (!is_dir($logsDir)) {
+    mkdir($logsDir, 0750, true);
 }
 
 try {

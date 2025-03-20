@@ -96,7 +96,7 @@ class TestCleanup
     private function generateTestFiles(): void
     {
         foreach ($this->testDirectories as $directory) {
-            Helper::log("Creating test files in {$directory}");
+            Helper::logInfo("Creating test files in {$directory}", true);
             
             // Daily backups (recent to be kept)
             $this->createRecentDailyBackups($directory);

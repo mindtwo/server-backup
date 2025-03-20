@@ -36,21 +36,36 @@ class BackupManager
         $this->results = [];
         $success = true;
         
+        Helper::logInfo("Starting backup process", true);
+        
         // Run all filesystem backups
         if (!$this->runFilesystemBackups()) {
             $success = false;
+            Helper::logError("One or more filesystem backups failed");
         }
         
         // Run all database backups
         if (!$this->runDatabaseBackups()) {
             $success = false;
+            Helper::logError("One or more database backups failed");
         }
         
         // Run cleanup process
-        $this->runCleanup();
+        Helper::logInfo("Starting cleanup process", true);
+        $deletedFiles = $this->runCleanup();
+        Helper::logInfo("Cleanup process completed. Deleted files: " . count($deletedFiles), true);
         
         // Send notifications if configured
-        $this->sendNotifications($success);
+        if ($this->sendNotifications($success)) {
+            Helper::logInfo("Notifications sent successfully");
+        }
+        
+        // Log overall result
+        if ($success) {
+            Helper::logInfo("Backup process completed successfully", true);
+        } else {
+            Helper::logError("Backup process completed with errors", true);
+        }
         
         return $success;
     }
@@ -73,7 +88,7 @@ class BackupManager
     private function runFilesystemBackups(): bool
     {
         if (empty($this->config['filesystems']) || !is_array($this->config['filesystems'])) {
-            Helper::log("No filesystem backups configured");
+            Helper::logInfo("No filesystem backups configured");
             return true;
         }
         
@@ -87,7 +102,13 @@ class BackupManager
                 
                 if (!$result->isSuccessful()) {
                     $success = false;
-                    Helper::log("Filesystem backup failed: " . $result->getMessage());
+                    Helper::logError("Filesystem backup failed: " . $result->getMessage());
+                    
+                    // Log detailed error information if available
+                    $details = $result->getDetails();
+                    if (!empty($details)) {
+                        Helper::logDebug("Filesystem backup error details: " . json_encode($details, JSON_PRETTY_PRINT));
+                    }
                 }
             } catch (\Throwable $e) {
                 $success = false;
@@ -96,7 +117,8 @@ class BackupManager
                     ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]
                 );
                 $this->results[] = $errorResult;
-                Helper::log("Filesystem backup error: " . $e->getMessage());
+                Helper::logError("Filesystem backup error: " . $e->getMessage());
+                Helper::logDebug("Exception trace: " . $e->getTraceAsString());
             }
         }
         
@@ -111,7 +133,7 @@ class BackupManager
     private function runDatabaseBackups(): bool
     {
         if (empty($this->config['databases']) || !is_array($this->config['databases'])) {
-            Helper::log("No database backups configured");
+            Helper::logInfo("No database backups configured");
             return true;
         }
         
@@ -125,7 +147,13 @@ class BackupManager
                 
                 if (!$result->isSuccessful()) {
                     $success = false;
-                    Helper::log("Database backup failed: " . $result->getMessage());
+                    Helper::logError("Database backup failed: " . $result->getMessage());
+                    
+                    // Log detailed error information if available
+                    $details = $result->getDetails();
+                    if (!empty($details)) {
+                        Helper::logDebug("Database backup error details: " . json_encode($details, JSON_PRETTY_PRINT));
+                    }
                 }
             } catch (\Throwable $e) {
                 $success = false;
@@ -134,7 +162,8 @@ class BackupManager
                     ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]
                 );
                 $this->results[] = $errorResult;
-                Helper::log("Database backup error: " . $e->getMessage());
+                Helper::logError("Database backup error: " . $e->getMessage());
+                Helper::logDebug("Exception trace: " . $e->getTraceAsString());
             }
         }
         
@@ -149,14 +178,21 @@ class BackupManager
     private function runCleanup(): array
     {
         try {
-            Helper::log("Starting cleanup process");
             $cleanup = new Cleanup($this->config);
             $deletedFiles = $cleanup->run();
-            Helper::log("Cleanup process completed");
+            
+            // Log detailed information about cleanup
+            if (!empty($deletedFiles)) {
+                Helper::logInfo("Cleanup removed " . count($deletedFiles) . " old backup files");
+                Helper::logDebug("Deleted files: " . implode(", ", $deletedFiles));
+            } else {
+                Helper::logInfo("No files needed cleaning up");
+            }
             
             return $deletedFiles;
         } catch (\Throwable $e) {
-            Helper::log("Cleanup process error: " . $e->getMessage());
+            Helper::logError("Cleanup process error: " . $e->getMessage());
+            Helper::logDebug("Exception trace: " . $e->getTraceAsString());
             return [];
         }
     }
@@ -193,6 +229,21 @@ class BackupManager
             foreach ($this->results as $result) {
                 if (!$result->isSuccessful()) {
                     $summary[] = "- " . $result->getMessage();
+                    
+                    // Add detailed error information if available
+                    $details = $result->getDetails();
+                    if (!empty($details)) {
+                        $summary[] = "  Error Details:";
+                        foreach ($details as $key => $value) {
+                            if (is_string($value)) {
+                                // Truncate long error messages for readability
+                                if (strlen($value) > 200) {
+                                    $value = substr($value, 0, 200) . "... (truncated)";
+                                }
+                                $summary[] = "    - {$key}: {$value}";
+                            }
+                        }
+                    }
                 }
             }
         }

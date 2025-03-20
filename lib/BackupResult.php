@@ -56,9 +56,11 @@ class BackupResult
     }
 
     /**
-     * @return array|null Array of errors if unsuccessful
+     * Get detailed error information
+     * 
+     * @return array|null Array of error details if unsuccessful
      */
-    public function getErrors(): ?array
+    public function getDetails(): ?array
     {
         return $this->errors;
     }

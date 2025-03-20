@@ -7,6 +7,11 @@ declare(strict_types=1);
  * Copy this file to config.php and customize the settings for your environment.
  */
 return [
+    // Logging configuration
+    'log_file' => 'logs/server-backup.log', // Path to log file (relative to BASE_PATH or absolute)
+    'log_level' => 1, // 0 = errors only, 1 = info (default), 2 = debug
+    'log_max_size' => 5 * 1024 * 1024, // Maximum log file size before rotation (5MB default)
+    'log_files_to_keep' => 5, // Number of rotated log files to keep
     // Retention policies
     'keep_daily_backups' => 30, // Days to keep daily backups
     'keep_monthly_backups' => 12, // Months to keep monthly backups
@@ -53,6 +58,17 @@ return [
             'db_password' => '', // Database password
             'db_name' => '', // Database name
             'tables' => [], // Optional: specific tables to backup (empty = all tables)
+            
+            // Domain Factory specific settings (if needed)
+            // 'db_socket' => '/path/to/mysql.sock', // MySQL socket path
+            // 'db_port' => 3306, // MySQL port if not default
+            // 'mysqldump_command' => '/usr/local/bin/mysqldump', // Full path to mysqldump if needed
+            // 'command_timeout' => 3600, // Timeout in seconds for the database backup command
+            // 'mysqldump_options' => [ // Additional mysqldump options
+            //     '--opt',
+            //     '--compress',
+            //     '--default-character-set=utf8mb4',
+            // ],
         ],
 
         // You can add more database backup configurations here

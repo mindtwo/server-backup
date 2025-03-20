@@ -43,7 +43,10 @@ abstract class AbstractBackup implements BackupInterface
      */
     public function getIdentifier(): string
     {
-        return $this->config['slug'] ?? 'unknown';
+        if (!isset($this->config['slug']) || !is_string($this->config['slug']) || empty($this->config['slug'])) {
+            return 'unknown';
+        }
+        return $this->config['slug'];
     }
     
     /**
@@ -99,4 +102,14 @@ abstract class AbstractBackup implements BackupInterface
      * @return string The file extension including the dot
      */
     abstract protected function getFileExtension(): string;
+    
+    /**
+     * Clean any existing backups with the same name
+     * 
+     * @return void
+     */
+    protected function cleanExistingBackups(): void
+    {
+        Helper::deleteBackupFiles($this->getBackupFilePath());
+    }
 }

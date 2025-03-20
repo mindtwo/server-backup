@@ -136,15 +136,18 @@ class Cleanup
      */
     private function scanBackupFiles(string $directory): array
     {
+        // Ensure directory has trailing slash
+        $directory = rtrim($directory, '/') . '/';
+        
         $files = scandir($directory);
         if ($files === false) {
             return [];
         }
         
         // Filter out directories and non-backup files
-        return array_filter($files, function($file) {
+        return array_filter($files, function($file) use ($directory) {
             return !in_array($file, ['.', '..']) && 
-                   is_file($file) && 
+                   is_file($directory . $file) && 
                    preg_match('/\.(tar|sql)\.gz$/', $file);
         });
     }

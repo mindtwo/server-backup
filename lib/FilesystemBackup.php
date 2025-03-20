@@ -49,7 +49,7 @@ class FilesystemBackup extends AbstractBackup
     public function run(): BackupResult
     {
         try {
-            Helper::log("Starting filesystem backup for {$this->getIdentifier()}");
+            Helper::logInfo("Starting filesystem backup for {$this->getIdentifier()}", true);
             
             $this->prepareSourcePaths();
             $this->cleanExistingBackups();
@@ -58,27 +58,38 @@ class FilesystemBackup extends AbstractBackup
             $result = $this->executeArchiveCommand($tarCommand);
             
             if (!$result['success']) {
+                $errorDetails = [
+                    'tar_error' => $result['output'],
+                    'command' => $result['command'] ?? 'unknown',
+                    'return_code' => $result['returnCode'] ?? 'unknown'
+                ];
+                
+                Helper::logError("Filesystem backup failed for {$this->getIdentifier()}: " . json_encode($errorDetails, JSON_PRETTY_PRINT));
+                
                 return BackupResult::failure(
                     "Filesystem backup failed for {$this->getIdentifier()}",
-                    ['tar_error' => $result['output']]
+                    $errorDetails
                 );
             }
             
             if (!Helper::compressFile($this->getBackupFilePath())) {
+                Helper::logError("Failed to compress backup file for {$this->getIdentifier()}");
                 return BackupResult::failure(
                     "Failed to compress backup file for {$this->getIdentifier()}"
                 );
             }
             
             $compressedFile = $this->getBackupFilePath() . '.gz';
-            Helper::log("Filesystem backup completed for {$this->getIdentifier()}");
+            Helper::logInfo("Filesystem backup completed for {$this->getIdentifier()}", true);
             
             return BackupResult::success(
                 "Filesystem backup successful for {$this->getIdentifier()}",
                 $compressedFile
             );
         } catch (\Throwable $e) {
-            Helper::log("Error during filesystem backup: " . $e->getMessage());
+            Helper::logError("Error during filesystem backup: " . $e->getMessage());
+            Helper::logDebug("Stack trace: " . $e->getTraceAsString());
+            
             return BackupResult::failure(
                 "Filesystem backup failed for {$this->getIdentifier()}: {$e->getMessage()}",
                 ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]
@@ -107,13 +118,7 @@ class FilesystemBackup extends AbstractBackup
         $this->sourceParentDir = $pathInfo['dirname'];
     }
     
-    /**
-     * Clean any existing backups with the same name
-     */
-    private function cleanExistingBackups(): void
-    {
-        Helper::deleteBackupFiles($this->getBackupFilePath());
-    }
+    // cleanExistingBackups method moved to AbstractBackup
     
     /**
      * Generate the tar command for creating the archive

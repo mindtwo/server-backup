@@ -57,14 +57,14 @@ $runCleanup = isset($options['run-cleanup']) || isset($options['all']) || empty(
 $configFile = __DIR__ . '/config.php';
 
 if (!file_exists($configFile)) {
-    Helper::log("Configuration file '{$configFile}' does not exist. Please copy config.example.php to config.php and configure it.");
+    Helper::logError("Configuration file '{$configFile}' does not exist. Please copy config.example.php to config.php and configure it.");
     exit(1);
 }
 
 $config = include $configFile;
 
 if (empty($config) || !is_array($config)) {
-    Helper::log("Invalid configuration format. Please check your config.php file.");
+    Helper::logError("Invalid configuration format. Please check your config.php file.");
     exit(1);
 }
 
@@ -111,6 +111,7 @@ try {
     echo "\nTest completed successfully.\n";
     exit(0);
 } catch (\Throwable $e) {
-    Helper::log("Fatal error: " . $e->getMessage());
+    Helper::logError("Fatal error: " . $e->getMessage());
+    Helper::logDebug("Stack trace: " . $e->getTraceAsString());
     exit(1);
 }

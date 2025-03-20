@@ -38,7 +38,7 @@ class DatabaseBackup extends AbstractBackup
     public function run(): BackupResult
     {
         try {
-            Helper::log("Starting database backup for {$this->getIdentifier()}");
+            Helper::logInfo("Starting database backup for {$this->getIdentifier()}", true);
             
             $this->cleanExistingBackups();
             
@@ -46,27 +46,39 @@ class DatabaseBackup extends AbstractBackup
             $result = $this->executeDumpCommand($dumpCommand);
             
             if (!$result['success']) {
+                $errorDetails = [
+                    'mysqldump_error' => $result['output'],
+                    'command' => $result['command'] ?? 'unknown',
+                    'return_code' => $result['returnCode'] ?? 'unknown'
+                ];
+                
+                // Log detailed error information
+                Helper::logError("Database backup failed for {$this->getIdentifier()}: " . json_encode($errorDetails, JSON_PRETTY_PRINT));
+                
                 return BackupResult::failure(
                     "Database backup failed for {$this->getIdentifier()}",
-                    ['mysqldump_error' => $result['output']]
+                    $errorDetails
                 );
             }
             
             if (!Helper::compressFile($this->getBackupFilePath())) {
+                Helper::logError("Failed to compress backup file for {$this->getIdentifier()}");
                 return BackupResult::failure(
                     "Failed to compress backup file for {$this->getIdentifier()}"
                 );
             }
             
             $compressedFile = $this->getBackupFilePath() . '.gz';
-            Helper::log("Database backup completed for {$this->getIdentifier()}");
+            Helper::logInfo("Database backup completed for {$this->getIdentifier()}", true);
             
             return BackupResult::success(
                 "Database backup successful for {$this->getIdentifier()}",
                 $compressedFile
             );
         } catch (\Throwable $e) {
-            Helper::log("Error during database backup: " . $e->getMessage());
+            Helper::logError("Error during database backup: " . $e->getMessage());
+            Helper::logDebug("Stack trace: " . $e->getTraceAsString());
+            
             return BackupResult::failure(
                 "Database backup failed for {$this->getIdentifier()}: {$e->getMessage()}",
                 ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]
@@ -82,13 +94,7 @@ class DatabaseBackup extends AbstractBackup
         return '.sql';
     }
     
-    /**
-     * Clean any existing backups with the same name
-     */
-    private function cleanExistingBackups(): void
-    {
-        Helper::deleteBackupFiles($this->getBackupFilePath());
-    }
+    // cleanExistingBackups method moved to AbstractBackup
     
     /**
      * Generate the mysqldump command
@@ -97,8 +103,14 @@ class DatabaseBackup extends AbstractBackup
      */
     private function generateDumpCommand(): array
     {
-        $command = self::MYSQLDUMP_COMMAND;
-        
+        // Domain Factory sometimes requires a specific mysqldump path 
+        // or specific flags for their hosting environment
+        $command = isset($this->config['mysqldump_command']) 
+            ? $this->config['mysqldump_command'] 
+            : self::MYSQLDUMP_COMMAND;
+            
+        // Handle Domain Factory's potential configurations
+        // Domain Factory sometimes requires specific socket paths
         $args = [
             '--no-tablespaces',
             '--single-transaction',  // Consistent snapshot for InnoDB
@@ -110,10 +122,29 @@ class DatabaseBackup extends AbstractBackup
             '--user', $this->getDatabaseUser(),
         ];
         
-        // Add password if specified
+        // Add socket path if specified
+        if (!empty($this->config['db_socket'])) {
+            $args[] = '--socket=' . $this->config['db_socket'];
+        }
+        
+        // Add port if specified
+        if (!empty($this->config['db_port'])) {
+            $args[] = '--port=' . $this->config['db_port'];
+        }
+        
+        // Handle password securely - use MYSQL_PWD environment variable instead of command line
+        // This prevents the password from appearing in process lists
         $password = $this->getDatabasePassword();
         if (!empty($password)) {
-            $args[] = '--password=' . $password;
+            // Note: We'll set MYSQL_PWD in the executeDumpCommand method
+            // We don't add --password to args here to keep it off command line
+        }
+        
+        // Add any custom mysqldump options if configured
+        if (!empty($this->config['mysqldump_options']) && is_array($this->config['mysqldump_options'])) {
+            foreach ($this->config['mysqldump_options'] as $option) {
+                $args[] = $option;
+            }
         }
         
         // Add specific tables if configured
@@ -146,7 +177,33 @@ class DatabaseBackup extends AbstractBackup
         $tmpArgs[] = '>';
         $tmpArgs[] = $this->getBackupFilePath();
         
-        return Helper::safeExec($command, $tmpArgs);
+        // Debug log the command being executed
+        Helper::logDebug("Executing command: {$command} " . implode(' ', $tmpArgs));
+        
+        // Get password for environment variable
+        $password = $this->getDatabasePassword();
+        $env = [];
+        if (!empty($password)) {
+            $env['MYSQL_PWD'] = $password;
+        }
+        
+        // Add a timeout to prevent hanging processes
+        $timeout = $this->config['command_timeout'] ?? 3600; // Default: 1 hour
+        
+        // Execute command with environment variables and timeout
+        $result = Helper::safeExecWithEnv($command, $tmpArgs, $env, $timeout);
+        
+        // Log error output if the command failed
+        if (!$result['success']) {
+            Helper::logError("MySQL dump command failed with output: " . $result['output']);
+            Helper::logError("Return code: " . ($result['returnCode'] ?? 'unknown'));
+            
+            // Check if mysqldump exists
+            $whichResult = Helper::safeExec('which', [$command]);
+            Helper::logError("MySQL dump location: " . ($whichResult['success'] ? $whichResult['output'] : 'Command not found'));
+        }
+        
+        return $result;
     }
     
     /**
