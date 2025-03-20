@@ -34,7 +34,7 @@ This project has a few system requirements:
 ## How To Install
 
 1. Clone this repository to a private folder on your server
-2. Make scripts executable: `chmod +x backup.php backup test-cleanup`
+2. Make scripts executable: `chmod +x backup.php backup`
 3. Copy `config.example.php` to `config.php` and set secure permissions: `chmod 600 config.php`
 4. Edit `config.php` with your backup settings (see Configuration section below)
 5. Run the backup script: `./backup.php`
@@ -202,31 +202,26 @@ Alternatively, configure the PHP command in your config.php file:
 - Set restrictive permissions on config.php (600) to protect database credentials
 
 
-## Testing Cleanup Functionality
+## Backup Retention and Cleanup
 
-The `test-cleanup` command allows you to verify that the backup cleanup system works correctly
-without waiting for real backups to expire.
+The backup system automatically manages file retention according to your configuration:
 
-```bash
-# Display help information
-./test-cleanup --help
-
-# Create test files and run cleanup (default)
-./test-cleanup
-
-# Only create test files
-./test-cleanup --run-test
-
-# Only run cleanup process
-./test-cleanup --run-cleanup
-
-# Use a specific PHP version
-./test-cleanup --php=php83 --run-test
+```php
+// Retention policies
+'keep_daily_backups'   => 7,   // Days to keep daily backups
+'keep_monthly_backups' => 3,   // Months to keep monthly backups
 ```
 
-When run, it creates test backup files with various timestamps and validates your retention settings
-without waiting for real backups to age.
+The cleanup system follows these rules:
 
-> **Note**: Both `backup` and `test-cleanup` scripts now support specifying the PHP version to use, either via the `--php=` command line parameter or through the `php_command` setting in your config.php file. This is particularly useful on servers where the default PHP version is too old to support this script (requires PHP 8.0+).
+1. **Monthly backups**: Backups created on the first day of each month are considered monthly backups. The system keeps one backup per month for the specified number of months.
+
+2. **Daily backups**: All other backups are considered daily backups and are kept for the specified number of days.
+
+3. **Monthly retention**: If there's no monthly backup for a month within the monthly retention period, the system will keep the newest daily backup from that month as a representative.
+
+The script uses accurate date calculations to determine which backups to keep, ensuring reliable retention regardless of the specific settings you choose.
+
+> **Note**: The `backup` script supports specifying the PHP version to use, either via the `--php=` command line parameter or through the `php_command` setting in your config.php file. This is particularly useful on servers where the default PHP version is too old to support this script (requires PHP 8.0+).
 
 [![Back to the top](https://www.mindtwo.de/downloads/doodles/github/repository-footer.png)](#)
