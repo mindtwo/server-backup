@@ -1,123 +1,209 @@
 <?php
+declare(strict_types=1);
 
-namespace lib;
+namespace ServerBackup;
 
+/**
+ * Manages backup file retention policies
+ */
 class Cleanup
 {
     /**
-     * Configuration.
-     *
-     * @var array
+     * @var array<string, mixed> Configuration
      */
-    protected $config;
-
+    private array $config;
+    
     /**
-     * Days to keep daily backups
-     *
-     * @var int
+     * @var int Days to keep daily backups
      */
-    protected $keep_daily_backups = 30;
-
+    private int $keepDailyBackups;
+    
     /**
-     * Months to keep monthly backups
-     *
-     * @var int
+     * @var int Months to keep monthly backups
      */
-    protected $keep_monthly_backups = 12;
-
+    private int $keepMonthlyBackups;
+    
     /**
-     * FilesystemBackup constructor.
-     *
-     * @param array $config
-     *
-     * @throws Exception
+     * @param array<string, mixed> $config Configuration array
      */
     public function __construct(array $config)
     {
         $this->config = $config;
-
-        if ($this->config['keep_daily_backups']) {
-            $this->keep_daily_backups = $this->config['keep_daily_backups'];
-        }
-
-        if ($this->config['keep_monthly_backups']) {
-            $this->keep_monthly_backups = $this->config['keep_monthly_backups'];
-        }
+        $this->keepDailyBackups = (int)($config['keep_daily_backups'] ?? 30);
+        $this->keepMonthlyBackups = (int)($config['keep_monthly_backups'] ?? 12);
     }
-
+    
     /**
-     * Run the cleanup proccess.
+     * Run cleanup process
+     * 
+     * @return array<string> List of deleted files
      */
-    public function run()
+    public function run(): array
     {
-        foreach ($this->getDirs() as $dir) {
-            $this->cleanDir($dir);
+        $deletedFiles = [];
+        
+        foreach ($this->getBackupDirectories() as $directory) {
+            Helper::log("Cleaning up directory: {$directory}");
+            $deletedInDir = $this->cleanDirectory($directory);
+            $deletedFiles = array_merge($deletedFiles, $deletedInDir);
         }
+        
+        if (count($deletedFiles) === 0) {
+            Helper::log("No files needed cleaning up");
+        } else {
+            Helper::log("Cleanup complete. Removed " . count($deletedFiles) . " old backup files");
+        }
+        
+        return $deletedFiles;
     }
-
+    
     /**
-     * Get all backup directories.
-     *
-     * @return array
+     * Get all backup directories from configuration
+     * 
+     * @return array<string> List of absolute directory paths
      */
-    protected function getDirs(): array
+    private function getBackupDirectories(): array
     {
-        $dirs = array_merge(
-            array_column($this->config['filesystems'], 'destination'),
-            array_column($this->config['databases'], 'destination')
-        );
-
-        $dirs = array_map(function ($dir) {
-            return $dir = realpath($dir);
-        }, $dirs);
-
-        return $dirs;
+        $directories = [];
+        
+        // Add filesystem backup destinations
+        if (!empty($this->config['filesystems']) && is_array($this->config['filesystems'])) {
+            foreach ($this->config['filesystems'] as $filesystem) {
+                if (!empty($filesystem['destination']) && is_dir($filesystem['destination'])) {
+                    $directories[] = Helper::normalizePath($filesystem['destination']);
+                }
+            }
+        }
+        
+        // Add database backup destinations
+        if (!empty($this->config['databases']) && is_array($this->config['databases'])) {
+            foreach ($this->config['databases'] as $database) {
+                if (!empty($database['destination']) && is_dir($database['destination'])) {
+                    $directories[] = Helper::normalizePath($database['destination']);
+                }
+            }
+        }
+        
+        return array_unique($directories);
     }
-
-    protected function cleanDir($dir): array
+    
+    /**
+     * Clean a single directory based on retention policies
+     * 
+     * @param string $directory Directory to clean
+     * @return array<string> List of deleted files
+     */
+    private function cleanDirectory(string $directory): array
     {
-        Helper::echo('Cleaning up ' . $dir);
-
-        $files = array_diff(scandir($dir), array('..', '.'));
-
+        $deletedFiles = [];
+        
+        if (!is_dir($directory)) {
+            Helper::log("Directory does not exist: {$directory}");
+            return $deletedFiles;
+        }
+        
+        $files = $this->scanBackupFiles($directory);
+        
         foreach ($files as $file) {
-            $this->deleteOrphanedDailyBackups($dir.'/'.$file);
-            $this->deleteOrphanedMonthlyBackups($dir.'/'.$file);
+            $fullPath = $directory . $file;
+            
+            // Check if this is a first-of-month backup (keep longer)
+            if ($this->isMonthlyBackup($file)) {
+                if ($this->isMonthlyBackupExpired($fullPath)) {
+                    Helper::log("Removing expired monthly backup: {$file}");
+                    if (unlink($fullPath)) {
+                        $deletedFiles[] = $fullPath;
+                    }
+                }
+            } 
+            // Not a monthly backup, treat as daily
+            else if ($this->isDailyBackupExpired($fullPath)) {
+                Helper::log("Removing expired daily backup: {$file}");
+                if (unlink($fullPath)) {
+                    $deletedFiles[] = $fullPath;
+                }
+            }
         }
-
-        return $result ?? [];
+        
+        return $deletedFiles;
     }
-
-    protected function deleteOrphanedDailyBackups($file) {
-        if (!file_exists($file)) {
-            return false;
+    
+    /**
+     * Scan a directory for backup files
+     * 
+     * @param string $directory Directory to scan
+     * @return array<string> List of backup files
+     */
+    private function scanBackupFiles(string $directory): array
+    {
+        $files = scandir($directory);
+        if ($files === false) {
+            return [];
         }
-
-        $lastchange = filemtime($file);
-
-        if ($lastchange + ($this->keep_daily_backups * 24 * 60 * 60) > time()) {
-            return false;
-        }
-
-        if (!preg_match('/.*\d{6}(?!01)\d{2}.*.tar.gz$/', $file)) {
-            return false;
-        }
-
-        return unlink($file);
+        
+        // Filter out directories and non-backup files
+        return array_filter($files, function($file) {
+            return !in_array($file, ['.', '..']) && 
+                   is_file($file) && 
+                   preg_match('/\.(tar|sql)\.gz$/', $file);
+        });
     }
-
-    protected function deleteOrphanedMonthlyBackups($file)
+    
+    /**
+     * Check if a file is a monthly backup (created on the first day of month)
+     * 
+     * @param string $filename Backup filename to check
+     * @return bool True if this is a monthly backup
+     */
+    private function isMonthlyBackup(string $filename): bool
+    {
+        // Check if filename contains a date pattern with day 01
+        return (bool)preg_match('/\d{6}01-\d{6}/', $filename);
+    }
+    
+    /**
+     * Check if a monthly backup has expired
+     * 
+     * @param string $file Backup file path
+     * @return bool True if the backup should be deleted
+     */
+    private function isMonthlyBackupExpired(string $file): bool
     {
         if (!file_exists($file)) {
             return false;
         }
-
-        $lastchange = filemtime($file);
-
-        if ($lastchange + ($this->keep_monthly_backups * 31 * 24 * 60 * 60) > time()) {
+        
+        $modificationTime = filemtime($file);
+        if ($modificationTime === false) {
             return false;
         }
-
-        return unlink($file);
+        
+        // Keep monthly backups for N months (approximate with days)
+        $expirationTime = time() - ($this->keepMonthlyBackups * 31 * 24 * 60 * 60);
+        
+        return $modificationTime < $expirationTime;
+    }
+    
+    /**
+     * Check if a daily backup has expired
+     * 
+     * @param string $file Backup file path
+     * @return bool True if the backup should be deleted
+     */
+    private function isDailyBackupExpired(string $file): bool
+    {
+        if (!file_exists($file)) {
+            return false;
+        }
+        
+        $modificationTime = filemtime($file);
+        if ($modificationTime === false) {
+            return false;
+        }
+        
+        // Keep daily backups for N days
+        $expirationTime = time() - ($this->keepDailyBackups * 24 * 60 * 60);
+        
+        return $modificationTime < $expirationTime;
     }
 }

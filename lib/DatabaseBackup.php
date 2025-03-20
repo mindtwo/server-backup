@@ -1,163 +1,191 @@
 <?php
+declare(strict_types=1);
 
-namespace lib;
+namespace ServerBackup;
 
-class DatabaseBackup
+/**
+ * Performs database backups using mysqldump
+ */
+class DatabaseBackup extends AbstractBackup
 {
+    private const MYSQLDUMP_COMMAND = 'mysqldump';
+    
     /**
-     * Configuration.
-     *
-     * @var array
+     * @inheritDoc
      */
-    protected $config;
-
-    /**
-     * Destination directory.
-     *
-     * @var string
-     */
-    protected $destination_dir;
-
-    /**
-     * Archive filename.
-     *
-     * @var string
-     */
-    protected $archive_filename;
-
-    /**
-     * DatabaseBackup constructor.
-     *
-     * @param array $config
-     *
-     * @throws \Exception
-     */
-    public function __construct(array $config)
+    protected function validateConfig(array $config): void
     {
-        $this->config = $config;
-        $this->destination_dir = $this->getDestinationDir();
-    }
-
-    /**
-     * Run the backup proccess.
-     */
-    public function run()
-    {
-        Helper::echo("\nStarting database backup for ".$this->getSlug());
-        $this->createSqlDump();
-    }
-
-    /**
-     * Get the absolut path of the destination directory.
-     *
-     * @throws \Exception
-     *
-     * @return string
-     */
-    protected function getDestinationDir(): string
-    {
-        if (empty($this->config['destination'])) {
-            throw new \Exception('Destination directory not found '.$this->config['destination']);
+        if (empty($config['db_host'])) {
+            throw new \InvalidArgumentException('Database host not configured');
         }
-
-        Helper::createDirIfNotExists($this->config['destination']);
-
-        return realpath($this->config['destination']);
-    }
-
-    /**
-     * Get the slug.
-     *
-     * @return string
-     */
-    protected function getSlug(): string
-    {
-        return $this->config['slug'] ?? '';
-    }
-
-    /**
-     * Get the database host.
-     *
-     * @throws \Exception
-     *
-     * @return string
-     */
-    protected function getHost(): string
-    {
-        if (empty($this->config['db_host'])) {
-            throw new \Exception('Database host not configured');
+        
+        if (empty($config['db_user'])) {
+            throw new \InvalidArgumentException('Database user not configured');
         }
-
+        
+        if (empty($config['db_name'])) {
+            throw new \InvalidArgumentException('Database name not configured');
+        }
+        
+        if (empty($config['slug'])) {
+            throw new \InvalidArgumentException('Backup slug/identifier not configured');
+        }
+    }
+    
+    /**
+     * @inheritDoc
+     */
+    public function run(): BackupResult
+    {
+        try {
+            Helper::log("Starting database backup for {$this->getIdentifier()}");
+            
+            $this->cleanExistingBackups();
+            
+            $dumpCommand = $this->generateDumpCommand();
+            $result = $this->executeDumpCommand($dumpCommand);
+            
+            if (!$result['success']) {
+                return BackupResult::failure(
+                    "Database backup failed for {$this->getIdentifier()}",
+                    ['mysqldump_error' => $result['output']]
+                );
+            }
+            
+            if (!Helper::compressFile($this->getBackupFilePath())) {
+                return BackupResult::failure(
+                    "Failed to compress backup file for {$this->getIdentifier()}"
+                );
+            }
+            
+            $compressedFile = $this->getBackupFilePath() . '.gz';
+            Helper::log("Database backup completed for {$this->getIdentifier()}");
+            
+            return BackupResult::success(
+                "Database backup successful for {$this->getIdentifier()}",
+                $compressedFile
+            );
+        } catch (\Throwable $e) {
+            Helper::log("Error during database backup: " . $e->getMessage());
+            return BackupResult::failure(
+                "Database backup failed for {$this->getIdentifier()}: {$e->getMessage()}",
+                ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]
+            );
+        }
+    }
+    
+    /**
+     * @inheritDoc
+     */
+    protected function getFileExtension(): string
+    {
+        return '.sql';
+    }
+    
+    /**
+     * Clean any existing backups with the same name
+     */
+    private function cleanExistingBackups(): void
+    {
+        Helper::deleteBackupFiles($this->getBackupFilePath());
+    }
+    
+    /**
+     * Generate the mysqldump command
+     * 
+     * @return array Command and arguments for mysqldump
+     */
+    private function generateDumpCommand(): array
+    {
+        $command = self::MYSQLDUMP_COMMAND;
+        
+        $args = [
+            '--no-tablespaces',
+            '--single-transaction',  // Consistent snapshot for InnoDB
+            '--skip-lock-tables',    // Avoid locking tables for read
+            '--routines',            // Include stored routines
+            '--triggers',            // Include triggers
+            '--add-drop-table',      // Makes restoration easier
+            '--host', $this->getDatabaseHost(),
+            '--user', $this->getDatabaseUser(),
+        ];
+        
+        // Add password if specified
+        $password = $this->getDatabasePassword();
+        if (!empty($password)) {
+            $args[] = '--password=' . $password;
+        }
+        
+        // Add specific tables if configured
+        $tables = $this->config['tables'] ?? [];
+        if (!empty($tables) && is_array($tables)) {
+            $args[] = $this->getDatabaseName();
+            foreach ($tables as $table) {
+                $args[] = $table;
+            }
+        } else {
+            // Backup the entire database
+            $args[] = $this->getDatabaseName();
+        }
+        
+        return [$command, $args];
+    }
+    
+    /**
+     * Execute the mysqldump command and capture output to a file
+     * 
+     * @param array $commandData Command and arguments
+     * @return array{output: string, success: bool} Command result
+     */
+    private function executeDumpCommand(array $commandData): array
+    {
+        [$command, $args] = $commandData;
+        
+        // Redirect output to the backup file
+        $tmpArgs = $args;
+        $tmpArgs[] = '>';
+        $tmpArgs[] = $this->getBackupFilePath();
+        
+        return Helper::safeExec($command, $tmpArgs);
+    }
+    
+    /**
+     * Get the database host
+     * 
+     * @return string Database host
+     */
+    private function getDatabaseHost(): string
+    {
         return $this->config['db_host'];
     }
-
+    
     /**
-     * Get the database user.
-     *
-     * @throws \Exception
-     *
-     * @return string
+     * Get the database user
+     * 
+     * @return string Database user
      */
-    protected function getUser(): string
+    private function getDatabaseUser(): string
     {
-        if (empty($this->config['db_user'])) {
-            throw new \Exception('Database user not configured');
-        }
-
         return $this->config['db_user'];
     }
-
+    
     /**
-     * Get the database password.
-     *
-     * @throws \Exception
-     *
-     * @return string
+     * Get the database password
+     * 
+     * @return string Database password (may be empty)
      */
-    protected function getPassword(): string
+    private function getDatabasePassword(): string
     {
         return $this->config['db_password'] ?? '';
     }
-
-    protected function getName(): string
+    
+    /**
+     * Get the database name
+     * 
+     * @return string Database name
+     */
+    private function getDatabaseName(): string
     {
-        if (empty($this->config['db_name'])) {
-            throw new \Exception('Database name not configured');
-        }
-
         return $this->config['db_name'];
-    }
-
-    protected function getFile()
-    {
-        if(empty($this->archive_filename)) {
-            $this->archive_filename = sprintf('%s/%s',
-                $this->destination_dir,
-                Helper::generateFilename($this->getSlug(), '.sql')
-            );
-        }
-
-        return $this->archive_filename;
-    }
-
-    protected function generateDumpCommand(): string
-    {
-        return sprintf('mysqldump --no-tablespaces -h %s -u%s -p%s %s > %s',
-            $this->getHost(),
-            $this->getUser(),
-            $this->getPassword(),
-            $this->getName(),
-            $this->getFile()
-        );
-    }
-
-    protected function createSqlDump()
-    {
-        Helper::deleteExistingBackup($this->getFile());
-
-        $result = shell_exec($this->generateDumpCommand());
-        Helper::gzip($this->getFile());
-
-        Helper::echo('SQL dump created for '.$this->getSlug());
     }
 }

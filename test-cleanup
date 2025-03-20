@@ -1,0 +1,116 @@
+#!/usr/bin/php
+<?php
+declare(strict_types=1);
+
+// Set error reporting
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+
+// Set base directory to script location for consistent relative paths
+chdir(__DIR__);
+
+// Include dependencies
+require_once __DIR__ . '/lib/Helper.php';
+require_once __DIR__ . '/lib/BackupResult.php';
+require_once __DIR__ . '/lib/BackupInterface.php';
+require_once __DIR__ . '/lib/AbstractBackup.php';
+require_once __DIR__ . '/lib/FilesystemBackup.php';
+require_once __DIR__ . '/lib/DatabaseBackup.php';
+require_once __DIR__ . '/lib/Cleanup.php';
+require_once __DIR__ . '/lib/BackupManager.php';
+require_once __DIR__ . '/lib/TestCleanup.php';
+
+use ServerBackup\Helper;
+use ServerBackup\Cleanup;
+use ServerBackup\TestCleanup;
+
+// Display help message if requested
+if (isset($argv[1]) && in_array($argv[1], ['-h', '--help', 'help'])) {
+    echo <<<EOT
+Server Backup - Cleanup Test Utility
+
+This utility creates test backup files with various dates to verify that 
+the cleanup functionality works correctly.
+
+Usage:
+  ./test-cleanup [options]
+
+Options:
+  --run-test    Create test backup files with various dates
+  --run-cleanup Run the cleanup process to remove expired backups
+  --all         Run both test creation and cleanup (default)
+  --help        Display this help message
+
+Example:
+  ./test-cleanup --all
+
+EOT;
+    exit(0);
+}
+
+// Parse command line options
+$options = getopt('', ['run-test', 'run-cleanup', 'all']);
+$runTest = isset($options['run-test']) || isset($options['all']) || empty($options);
+$runCleanup = isset($options['run-cleanup']) || isset($options['all']) || empty($options);
+
+// Load configuration
+$configFile = __DIR__ . '/config.php';
+
+if (!file_exists($configFile)) {
+    Helper::log("Configuration file '{$configFile}' does not exist. Please copy config.example.php to config.php and configure it.");
+    exit(1);
+}
+
+$config = include $configFile;
+
+if (empty($config) || !is_array($config)) {
+    Helper::log("Invalid configuration format. Please check your config.php file.");
+    exit(1);
+}
+
+try {
+    // Run tests if requested
+    if ($runTest) {
+        echo "\n=== CREATING TEST BACKUP FILES ===\n\n";
+        $tester = new TestCleanup($config);
+        $results = $tester->run();
+        
+        echo "\nTest Summary:\n";
+        echo "------------\n";
+        echo "Files created: {$results['files_created']}\n";
+        echo "Test directories:\n";
+        foreach ($results['test_directories'] as $dir) {
+            echo "  - {$dir}\n";
+        }
+        echo "\nRetention Policies:\n";
+        echo "  - Keep daily backups: {$results['retention_policies']['keep_daily_backups']} days\n";
+        echo "  - Keep monthly backups: {$results['retention_policies']['keep_monthly_backups']} months\n";
+        echo "\nTest files have been created with a mix of dates to test cleanup functionality.\n";
+        echo "Some files are within the retention period and should be kept, while others\n";
+        echo "are older and should be removed by the cleanup process.\n";
+    }
+    
+    // Run cleanup if requested
+    if ($runCleanup) {
+        echo "\n=== RUNNING CLEANUP PROCESS ===\n\n";
+        $cleanup = new Cleanup($config);
+        $deletedFiles = $cleanup->run();
+        
+        echo "\nCleanup Summary:\n";
+        echo "--------------\n";
+        echo "Files deleted: " . count($deletedFiles) . "\n";
+        
+        if (count($deletedFiles) > 0) {
+            echo "\nDeleted files:\n";
+            foreach ($deletedFiles as $file) {
+                echo "  - " . basename($file) . "\n";
+            }
+        }
+    }
+    
+    echo "\nTest completed successfully.\n";
+    exit(0);
+} catch (\Throwable $e) {
+    Helper::log("Fatal error: " . $e->getMessage());
+    exit(1);
+}

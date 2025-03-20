@@ -1,164 +1,196 @@
 <?php
+declare(strict_types=1);
 
-namespace lib;
+namespace ServerBackup;
 
-use Exception;
-
-class FilesystemBackup
+/**
+ * Performs filesystem backups using tar
+ */
+class FilesystemBackup extends AbstractBackup
 {
-    const ARCHIVER = 'tar';
+    private const ARCHIVER = 'tar';
+    
+    /**
+     * @var string Source directory to backup
+     */
+    private string $sourceDir;
+    
+    /**
+     * @var string Source directory name (without path)
+     */
+    private string $sourceDirName;
+    
+    /**
+     * @var string Directory containing the source directory
+     */
+    private string $sourceParentDir;
 
     /**
-     * Configuration.
-     *
-     * @var array
+     * @inheritDoc
      */
-    protected $config;
-
-    /**
-     * Project base directory.
-     *
-     * @var false|string
-     */
-    protected $base_dir;
-
-    /**
-     * Source directory.
-     *
-     * @var string
-     */
-    protected $source_dir;
-
-    /**
-     * Destination.
-     *
-     * @var string
-     */
-    protected $destination_dir;
-
-    /**
-     * Archive filename.
-     *
-     * @var string
-     */
-    protected $archive_filename;
-
-    /**
-     * FilesystemBackup constructor.
-     *
-     * @param array $config
-     *
-     * @throws Exception
-     */
-    public function __construct(array $config)
+    protected function validateConfig(array $config): void
     {
-        $this->config = $config;
-        $this->base_dir = realpath('./');
-        $this->source_dir = $this->getSourceDir();
-        $this->destination_dir = $this->getDestinationDir();
-    }
-
-    public function run()
-    {
-        Helper::echo("\nStarting file backup for ".$this->getSlug());
-        $archive = $this->createArchive();
-    }
-
-    protected function getSourceDir(): string
-    {
-        if (empty($this->config['source']) || ! is_dir($this->config['source'])) {
-            throw new \Exception('Source directory not found');
+        if (empty($config['source'])) {
+            throw new \InvalidArgumentException('Source directory not configured');
         }
-
-        return realpath($this->config['source']);
-    }
-
-    protected function getRelativeSourceDir(): string
-    {
-        $parts = explode('/', $this->source_dir);
-
-        return array_pop($parts);
-    }
-
-    protected function getSourceWorkingDir(): string
-    {
-        $parts = explode('/', $this->source_dir);
-        array_pop($parts);
-
-        return implode('/', $parts);
-    }
-
-    protected function getDestinationDir(): string
-    {
-        if (empty($this->config['destination'])) {
-            throw new \Exception('Destination directory not found '.$this->config['destination']);
+        
+        if (!is_dir($config['source'])) {
+            throw new \InvalidArgumentException("Source directory does not exist: {$config['source']}");
         }
-
-        Helper::createDirIfNotExists($this->config['destination']);
-
-        return realpath($this->config['destination']);
+        
+        if (empty($config['slug'])) {
+            throw new \InvalidArgumentException('Backup slug/identifier not configured');
+        }
     }
-
-    protected function getExcludesAsParams(): string
+    
+    /**
+     * @inheritDoc
+     */
+    public function run(): BackupResult
     {
-        $excludes = $this->config['exclude'] ?? [];
-        $prefix = ' --exclude=';
-
-        return ! empty($excludes)
-            ? $prefix.implode($prefix, $excludes)
-            : '';
-    }
-
-    protected function getArchiveFile(): string
-    {
-        if(empty($this->archive_filename)) {
-            $this->archive_filename = sprintf('%s/%s',
-                $this->destination_dir,
-                Helper::generateFilename($this->getSlug())
+        try {
+            Helper::log("Starting filesystem backup for {$this->getIdentifier()}");
+            
+            $this->prepareSourcePaths();
+            $this->cleanExistingBackups();
+            
+            $tarCommand = $this->generateArchiveCommand();
+            $result = $this->executeArchiveCommand($tarCommand);
+            
+            if (!$result['success']) {
+                return BackupResult::failure(
+                    "Filesystem backup failed for {$this->getIdentifier()}",
+                    ['tar_error' => $result['output']]
+                );
+            }
+            
+            if (!Helper::compressFile($this->getBackupFilePath())) {
+                return BackupResult::failure(
+                    "Failed to compress backup file for {$this->getIdentifier()}"
+                );
+            }
+            
+            $compressedFile = $this->getBackupFilePath() . '.gz';
+            Helper::log("Filesystem backup completed for {$this->getIdentifier()}");
+            
+            return BackupResult::success(
+                "Filesystem backup successful for {$this->getIdentifier()}",
+                $compressedFile
             );
-
+        } catch (\Throwable $e) {
+            Helper::log("Error during filesystem backup: " . $e->getMessage());
+            return BackupResult::failure(
+                "Filesystem backup failed for {$this->getIdentifier()}: {$e->getMessage()}",
+                ['exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]
+            );
         }
-
-        return $this->archive_filename;
     }
-
-    protected function getSlug(): string
-    {
-        return $this->config['slug'] ?? '';
-    }
-
+    
     /**
-     * Generate archive command.
-     *
-     * @return string
+     * @inheritDoc
      */
-    protected function generateArchiveCommand(): string
+    protected function getFileExtension(): string
     {
-        return sprintf('%s -cv %s -f %s %s  ',
-            self::ARCHIVER,
-            $this->getExcludesAsParams(),
-            $this->getArchiveFile(),
-            $this->getRelativeSourceDir()
-        );
+        return '.tar';
     }
-
+    
     /**
-     * Create archive.
-     *
-     * @throws Exception
+     * Prepare source directory path information
      */
-    protected function createArchive()
+    private function prepareSourcePaths(): void
     {
-        Helper::deleteExistingBackup($this->getArchiveFile());
-
-        chdir($this->getSourceWorkingDir());
-        $result = shell_exec($this->generateArchiveCommand());
-        chdir($this->base_dir);
-
-        if (! empty($result)) {
-            //throw new Exception('Error while archiving: '.$result);
+        $this->sourceDir = realpath($this->config['source']);
+        
+        // Extract the source directory name and parent directory
+        $pathInfo = pathinfo($this->sourceDir);
+        $this->sourceDirName = $pathInfo['basename'];
+        $this->sourceParentDir = $pathInfo['dirname'];
+    }
+    
+    /**
+     * Clean any existing backups with the same name
+     */
+    private function cleanExistingBackups(): void
+    {
+        Helper::deleteBackupFiles($this->getBackupFilePath());
+    }
+    
+    /**
+     * Generate the tar command for creating the archive
+     * 
+     * @return string[] Command and arguments for the tar process
+     */
+    private function generateArchiveCommand(): array
+    {
+        $excludeParams = $this->getExcludeParams();
+        
+        // Base tar command
+        $command = self::ARCHIVER;
+        
+        // Command arguments
+        $args = ['-c'];
+        
+        // Add verbose option if needed
+        if (($this->config['verbose'] ?? false) === true) {
+            $args[] = '-v';
         }
-
-        Helper::gzip($this->getArchiveFile());
+        
+        // Add exclude patterns
+        foreach ($excludeParams as $excludePattern) {
+            $args[] = '--exclude=' . $excludePattern;
+        }
+        
+        // Add output file
+        $args[] = '-f';
+        $args[] = $this->getBackupFilePath();
+        
+        // Add source directory (just the name, not the full path)
+        $args[] = '-C';
+        $args[] = $this->sourceParentDir;
+        $args[] = $this->sourceDirName;
+        
+        return [$command, $args];
+    }
+    
+    /**
+     * Execute the archive command
+     * 
+     * @param array $commandData Command and arguments
+     * @return array{output: string, success: bool} Command result
+     */
+    private function executeArchiveCommand(array $commandData): array
+    {
+        [$command, $args] = $commandData;
+        
+        // Execute the command from the parent directory
+        $currentDir = getcwd();
+        
+        try {
+            return Helper::safeExec($command, $args);
+        } finally {
+            // Restore original directory if it was changed
+            if ($currentDir !== false && getcwd() !== $currentDir) {
+                chdir($currentDir);
+            }
+        }
+    }
+    
+    /**
+     * Get exclude patterns for tar command
+     * 
+     * @return string[] Array of patterns to exclude
+     */
+    private function getExcludeParams(): array
+    {
+        $patterns = $this->config['exclude'] ?? [];
+        if (!is_array($patterns)) {
+            return [];
+        }
+        
+        // Sanitize exclude patterns
+        return array_map(function ($pattern) {
+            // Remove any leading slashes to make patterns relative
+            return ltrim($pattern, '/');
+        }, $patterns);
     }
 }

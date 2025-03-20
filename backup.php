@@ -1,56 +1,56 @@
 #!/usr/bin/php
 <?php
+declare(strict_types=1);
 
-use lib\DatabaseBackup;
-use lib\FilesystemBackup;
-use lib\Helper;
-use lib\Cleanup;
+// Set error reporting
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
 
-require_once 'lib/Helper.php';
-require_once 'lib/FilesystemBackup.php';
-require_once 'lib/DatabaseBackup.php';
-require_once 'lib/Cleanup.php';
+// Set base directory to script location for consistent relative paths
+chdir(__DIR__);
 
+// Include dependencies
+require_once __DIR__ . '/lib/Helper.php';
+require_once __DIR__ . '/lib/BackupResult.php';
+require_once __DIR__ . '/lib/BackupInterface.php';
+require_once __DIR__ . '/lib/AbstractBackup.php';
+require_once __DIR__ . '/lib/FilesystemBackup.php';
+require_once __DIR__ . '/lib/DatabaseBackup.php';
+require_once __DIR__ . '/lib/Cleanup.php';
+require_once __DIR__ . '/lib/BackupManager.php';
+
+use ServerBackup\Helper;
+use ServerBackup\BackupManager;
+
+// Load configuration
 $configFile = __DIR__ . '/config.php';
 
-if(!file_exists($configFile)) {
-    echo "Configuration file '{$configFile}' does not exist.\n";
+if (!file_exists($configFile)) {
+    Helper::log("Configuration file '{$configFile}' does not exist. Please copy config.example.php to config.php and configure it.");
     exit(1);
 }
 
 $config = include $configFile;
 
-if (empty($config) || ! is_array($config)) {
-    echo "Something went wrong with your configuration.\n";
+if (empty($config) || !is_array($config)) {
+    Helper::log("Invalid configuration format. Please check your config.php file.");
     exit(1);
 }
 
-chdir(dirname(__FILE__));
-
-foreach ($config['filesystems'] ?? [] as $filesystemConfig) {
-    try {
-        $backup = new FilesystemBackup($filesystemConfig);
-        $backup->run();
-    } catch (Throwable $error) {
-        echo Helper::echo('Filesystem backup failed: '.$error->getMessage());
-        exit(1);
-    }
+try {
+    // Initialize backup manager
+    $backupManager = new BackupManager($config);
+    
+    // Run backup process
+    Helper::log("Starting backup process");
+    $success = $backupManager->run();
+    
+    // Output summary
+    echo "\n" . $backupManager->generateSummary() . "\n";
+    
+    // Set exit code based on success
+    exit($success ? 0 : 1);
+} catch (\Throwable $e) {
+    Helper::log("Fatal error: " . $e->getMessage());
+    exit(1);
 }
-
-foreach ($config['databases'] ?? [] as $databaseConfig) {
-    try {
-        $backup = new DatabaseBackup($databaseConfig);
-        $backup->run();
-    } catch (Throwable $error) {
-        echo Helper::echo('Database backup failed: '.$error->getMessage());
-        exit(1);
-    }
-}
-echo "\nAll Backups done. Your are save!\n";
-
-echo "\nStarting cleanup...\n\n";
-$cleanup = new Cleanup($config);
-$cleanup->run();
-echo "\nCleanup done. Orphaned files are gone!\n";
-
-?>

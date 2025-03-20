@@ -1,4 +1,17 @@
-#!/usr/bin/env php
-<?php
+#!/bin/bash
 
-require_once __DIR__.'/backup.php';
+# Server Backup wrapper script
+# This script ensures the backup runs with the correct PHP binary
+# and from the correct directory
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Change to the script directory
+cd "$SCRIPT_DIR"
+
+# Run the PHP backup script
+php backup.php
+
+# Exit with the same status code as the PHP script
+exit $?
