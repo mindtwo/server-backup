@@ -119,7 +119,8 @@ class TestCleanup
      */
     private function createRecentDailyBackups(string $directory): void
     {
-        $keepDays = $this->config['keep_daily_backups'] ?? 30;
+        $keepDays = (int)($this->config['keep_daily_backups'] ?? 30);
+        Helper::logInfo("Creating recent daily backups for the last {$keepDays} days", true);
         
         // Create one backup for each day within the retention period
         for ($daysAgo = 1; $daysAgo <= $keepDays; $daysAgo++) {
@@ -143,10 +144,12 @@ class TestCleanup
      */
     private function createOldDailyBackups(string $directory): void
     {
-        $keepDays = $this->config['keep_daily_backups'] ?? 30;
+        $keepDays = (int)($this->config['keep_daily_backups'] ?? 30);
+        $extraDays = 5;
+        Helper::logInfo("Creating old daily backups from day " . ($keepDays + 1) . " to " . ($keepDays + $extraDays), true);
         
-        // Create 5 additional backups outside the retention period (to be deleted)
-        for ($daysAgo = $keepDays + 1; $daysAgo <= $keepDays + 5; $daysAgo++) {
+        // Create additional backups outside the retention period (to be deleted)
+        for ($daysAgo = $keepDays + 1; $daysAgo <= $keepDays + $extraDays; $daysAgo++) {
             $date = new \DateTime();
             $date->modify("-{$daysAgo} days");
             
@@ -167,7 +170,8 @@ class TestCleanup
      */
     private function createRecentMonthlyBackups(string $directory): void
     {
-        $keepMonths = $this->config['keep_monthly_backups'] ?? 12;
+        $keepMonths = (int)($this->config['keep_monthly_backups'] ?? 12);
+        Helper::logInfo("Creating recent monthly backups for the last {$keepMonths} months", true);
         
         // Create one backup for each month within the retention period
         for ($monthsAgo = 1; $monthsAgo <= $keepMonths; $monthsAgo++) {
@@ -187,10 +191,12 @@ class TestCleanup
      */
     private function createOldMonthlyBackups(string $directory): void
     {
-        $keepMonths = $this->config['keep_monthly_backups'] ?? 12;
+        $keepMonths = (int)($this->config['keep_monthly_backups'] ?? 12);
+        $extraMonths = 3;
+        Helper::logInfo("Creating old monthly backups from month " . ($keepMonths + 1) . " to " . ($keepMonths + $extraMonths), true);
         
-        // Create 3 additional monthly backups outside the retention period (to be deleted)
-        for ($monthsAgo = $keepMonths + 1; $monthsAgo <= $keepMonths + 3; $monthsAgo++) {
+        // Create additional monthly backups outside the retention period (to be deleted)
+        for ($monthsAgo = $keepMonths + 1; $monthsAgo <= $keepMonths + $extraMonths; $monthsAgo++) {
             $date = new \DateTime();
             $date->modify("-{$monthsAgo} months");
             $date->setDate((int)$date->format('Y'), (int)$date->format('m'), 1); // First day of month
